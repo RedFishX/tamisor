@@ -29,7 +29,9 @@ import { type AuditResult, type Finding, type Severity } from '../domain/audit'
 import { emptyAudit } from '../infrastructure/configuration-import'
 import type { ImportedAuditResult } from '../application/audit-service'
 import { applyMetricFilter, matchesFindingQuery, type MetricFilter } from '../application/finding-filters'
-import { computeTrend, recordAudit, type HistoryEntry, type HistoryStore } from '../application/audit-history'
+import { computeTrend, entriesForSource, recordAudit, type HistoryEntry, type HistoryStore } from '../application/audit-history'
+import { categoryFamilies, prioritizeFindings, scoreWithoutCritical, summarizeFamilies, summarizeVdoms, type FindingFamily } from '../domain/overview'
+import { familyLabels, renderOverview } from './overview-view'
 import { createIndexedDbHistoryStore } from '../infrastructure/indexeddb-history-store'
 import { renderHistory } from './history-view'
 import { renderCompliance, renderRecommendation, serializeFindingsCsv } from './recommendation-view'
@@ -83,6 +85,9 @@ let activeService = 'all'
 let selectedFindingId: string | null = audit.findings[0]?.id ?? null
 let showAcknowledged = false
 let searchQuery = ''
+let activeFamily: FindingFamily | 'all' = 'all'
+type View = 'overview' | 'findings'
+let activeView: View = 'findings'
 const compactLayout = window.matchMedia('(max-width: 900px)')
 let historyStore: HistoryStore | null = null
 let historyEntries: HistoryEntry[] = []
@@ -164,10 +169,19 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <div class="configuration-score" id="configuration-score" aria-label="Note globale de la configuration"></div>
       </div>
 
-      <div class="metrics" id="metrics"></div>
-      <p class="executive-summary" id="executive-summary"></p>
+      <nav class="view-tabs" role="tablist" aria-label="Vues de l’audit">
+        <button type="button" role="tab" id="tab-overview" aria-controls="view-overview" data-view="overview">Vue d’ensemble</button>
+        <button type="button" role="tab" id="tab-findings" aria-controls="view-findings" data-view="findings">Constats <span id="tab-findings-count"></span></button>
+      </nav>
+
       <div class="import-feedback" id="import-feedback" role="alert" hidden></div>
       <div class="comparison-summary" id="comparison-summary" hidden></div>
+
+      <div class="overview" id="view-overview" role="tabpanel" aria-labelledby="tab-overview" hidden></div>
+
+      <div class="view-panel" id="view-findings" role="tabpanel" aria-labelledby="tab-findings">
+      <div class="metrics" id="metrics"></div>
+      <p class="executive-summary" id="executive-summary"></p>
 
       <section class="audit-panel">
         <div class="toolbar">
@@ -218,6 +232,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <aside class="finding-detail" id="finding-detail" aria-label="Détail du constat"></aside>
         </div>
       </section>
+      </div>
     </section>
   </main>
   <dialog class="markdown-dialog" id="markdown-dialog">
@@ -267,7 +282,8 @@ const policyForFinding = (finding: Finding) => audit.policies.find((candidate) =
 
 const filteredFindings = (options: { ignoreSeverity?: boolean } = {}) => filterAcknowledgedFindings(audit.findings, acknowledged, sourceName, showAcknowledged).filter((finding) => {
   const matchesSeverity = options.ignoreSeverity || activeSeverity === 'all' || finding.severity === activeSeverity
-  const matchesCategory = activeCategory === 'all' || finding.category === activeCategory
+  const matchesCategory = (activeCategory === 'all' || finding.category === activeCategory) &&
+    (activeFamily === 'all' || categoryFamilies[finding.category] === activeFamily)
   const policy = policyForFinding(finding)
   if (!matchesFindingQuery(finding, policy, searchQuery)) return false
   const matchesVdom = activeVdom === 'all' || (policy?.vdom ?? 'global') === activeVdom
@@ -301,6 +317,7 @@ const categoryOptionLabel = (value: string) =>
 
 const renderFilterChips = () => {
   const chips: Array<[string, string, string]> = [
+    ['family', 'Famille', activeFamily === 'all' ? '' : familyLabels[activeFamily]],
     ['category', 'Type', activeCategory === 'all' ? '' : categoryOptionLabel(activeCategory)],
     ['vdom', 'VDOM', activeVdom === 'all' ? '' : activeVdom],
     ['interface', 'Interface', activeInterface === 'all' ? '' : activeInterface],
@@ -318,6 +335,7 @@ const renderFilterChips = () => {
 }
 
 const clearFilter = (key: string) => {
+  if (key === 'family') activeFamily = 'all'
   if (key === 'category') activeCategory = 'all'
   if (key === 'vdom') activeVdom = 'all'
   if (key === 'interface') activeInterface = 'all'
@@ -478,7 +496,7 @@ const renderDetail = (finding: Finding | undefined) => {
   `
 }
 
-const hasActiveFilters = () => Boolean(searchQuery.trim()) || [activeSeverity, activeCategory, activeVdom, activeInterface, activeSource, activeDestination, activeService].some((value) => value !== 'all')
+const hasActiveFilters = () => Boolean(searchQuery.trim()) || [activeSeverity, activeCategory, activeFamily, activeVdom, activeInterface, activeSource, activeDestination, activeService].some((value) => value !== 'all')
 
 const renderNoResult = () => hasActiveFilters()
   ? `<div class="empty-list"><i data-lucide="filter"></i><strong>Aucun constat pour ces filtres</strong><span>Élargissez la recherche ou retirez un filtre.</span><button class="secondary-button" type="button" data-reset-filters>Retirer tous les filtres</button></div>`
@@ -526,10 +544,56 @@ const refreshHistory = async () => {
   }
   renderHistoryPanel()
   renderConfigurationScore()
+  renderOverviewPanel()
+}
+
+const openFindings = () => sourceName ? filterAcknowledgedFindings(audit.findings, acknowledged, sourceName, false) : []
+
+const renderOverviewPanel = () => {
+  const panel = document.querySelector<HTMLDivElement>('#view-overview')!
+  const open = openFindings()
+  document.querySelector<HTMLSpanElement>('#tab-findings-count')!.textContent = sourceName ? String(open.length) : ''
+  document.querySelector<HTMLButtonElement>('#tab-overview')!.disabled = !sourceName
+  if (!sourceName) {
+    panel.innerHTML = ''
+    return
+  }
+  const score = calculateConfigurationScore(audit)
+  const trend = computeTrend(historyEntries, sourceName)
+  panel.innerHTML = renderOverview({
+    score,
+    tone: score >= 80 ? 'good' : score >= 60 ? 'warning' : 'critical',
+    scoreDelta: trend?.previous ? trend.scoreDelta : undefined,
+    previousDate: trend?.previous?.analyzedAt,
+    scoreAfterCritical: scoreWithoutCritical(audit),
+    criticalCount: audit.stats.critical,
+    history: entriesForSource(historyEntries, sourceName),
+    families: summarizeFamilies(open),
+    vdoms: summarizeVdoms(audit.policies, open),
+    priorities: prioritizeFindings(open, 3),
+    openFindings: open.length,
+  })
+}
+
+const viewFromHash = (): View | null => location.hash === '#synthese' ? 'overview' : location.hash === '#constats' ? 'findings' : null
+
+const setView = (view: View, updateHash = true) => {
+  activeView = sourceName ? view : 'findings'
+  document.querySelector<HTMLElement>('.content')!.dataset.view = activeView
+  document.querySelector<HTMLDivElement>('#view-overview')!.hidden = activeView !== 'overview'
+  document.querySelector<HTMLDivElement>('#view-findings')!.hidden = activeView !== 'findings'
+  for (const tab of document.querySelectorAll<HTMLButtonElement>('.view-tabs [data-view]')) {
+    const selected = tab.dataset.view === activeView
+    tab.setAttribute('aria-selected', String(selected))
+    tab.tabIndex = selected ? 0 : -1
+  }
+  const hash = activeView === 'overview' ? '#synthese' : '#constats'
+  if (updateHash && sourceName && location.hash !== hash) history.replaceState(null, '', hash)
 }
 
 const renderAll = () => {
   renderSource()
+  renderOverviewPanel()
   renderHistoryPanel()
   renderConfigurationScore()
   renderContextFilters()
@@ -586,6 +650,7 @@ const loadConfiguration = async (content: string, name: string) => {
   sourceName = name
   selectedFindingId = audit.findings[0]?.id ?? null
   renderAll()
+  setView(viewFromHash() ?? 'overview')
   await refreshHistory()
 }
 
@@ -684,7 +749,7 @@ document.querySelector<HTMLDivElement>('#findings-list')!.addEventListener('clic
     searchQuery = ''
     document.querySelector<HTMLInputElement>('#finding-search')!.value = ''
     activeSeverity = 'all'
-    for (const key of ['category', 'vdom', 'interface', 'source', 'destination', 'service']) clearFilter(key)
+    for (const key of ['family', 'category', 'vdom', 'interface', 'source', 'destination', 'service']) clearFilter(key)
     renderContextFilters()
     refreshFindingsView()
   }
@@ -843,6 +908,7 @@ document.querySelector<HTMLInputElement>('#ack-import-input')!.addEventListener(
 })
 
 const refreshFindingsView = () => {
+  renderOverviewPanel()
   renderFilterChips()
   renderMetrics()
   renderTabs()
@@ -948,7 +1014,7 @@ document.addEventListener('keydown', (event) => {
     setSidebarOpen(false)
     return
   }
-  if (isTyping(event.target) || !sourceName) return
+  if (isTyping(event.target) || !sourceName || activeView !== 'findings') return
   const key = event.key.toLowerCase()
   if (event.key === '/') {
     event.preventDefault()
@@ -967,4 +1033,43 @@ document.addEventListener('keydown', (event) => {
   }
 })
 
+document.querySelector<HTMLElement>('.view-tabs')!.addEventListener('click', (event) => {
+  const tab = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-view]')
+  if (tab && !tab.disabled) setView(tab.dataset.view as View)
+})
+document.querySelector<HTMLElement>('.view-tabs')!.addEventListener('keydown', (event) => {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+  const next: View = activeView === 'overview' ? 'findings' : 'overview'
+  setView(next)
+  document.querySelector<HTMLButtonElement>(`.view-tabs [data-view="${next}"]`)?.focus()
+})
+window.addEventListener('hashchange', () => {
+  const view = viewFromHash()
+  if (view) setView(view, false)
+})
+
+const showFindingsWith = (apply: () => void) => {
+  for (const key of ['family', 'category', 'vdom', 'interface', 'source', 'destination', 'service']) clearFilter(key)
+  activeSeverity = 'all'
+  searchQuery = ''
+  document.querySelector<HTMLInputElement>('#finding-search')!.value = ''
+  apply()
+  renderContextFilters()
+  refreshFindingsView()
+  setView('findings')
+  window.scrollTo({ top: 0 })
+}
+
+document.querySelector<HTMLDivElement>('#view-overview')!.addEventListener('click', (event) => {
+  const target = event.target as HTMLElement
+  const family = target.closest<HTMLButtonElement>('[data-family]')
+  const vdom = target.closest<HTMLButtonElement>('[data-vdom]')
+  const priority = target.closest<HTMLButtonElement>('[data-priority-id]')
+  if (family) showFindingsWith(() => { activeFamily = family.dataset.family as FindingFamily })
+  else if (vdom) showFindingsWith(() => { activeVdom = vdom.dataset.vdom ?? 'all' })
+  else if (priority) showFindingsWith(() => { selectedFindingId = priority.dataset.priorityId ?? null })
+  else if (target.closest('[data-show-findings]')) showFindingsWith(() => {})
+})
+
 renderAll()
+setView('findings', false)
