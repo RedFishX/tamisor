@@ -1,4 +1,5 @@
 import type { Finding, FirewallPolicy } from '../domain/audit'
+import { complianceReferences, formatComplianceReference } from '../domain/compliance'
 
 const values = (items: string[]): string => items.join(', ') || 'Non défini'
 
@@ -12,7 +13,7 @@ export const generatePolicyMarkdown = (
     policy.lastUsed ? `| Dernière utilisation | ${policy.lastUsed} |` : '',
   ].filter(Boolean).join('\n')
   const findingsDocumentation = findings.length
-    ? findings.map((finding) => `### ${finding.title}\n\n${finding.detail}\n\n**Recommandation :** ${finding.recommendation.summary}\n\n${finding.recommendation.actions.map((action) => `- ${action}`).join('\n')}`).join('\n\n')
+    ? findings.map((finding) => `### ${finding.title}\n\n${finding.detail}\n\n**Recommandation :** ${finding.recommendation.summary}\n\n${finding.recommendation.actions.map((action) => `- ${action}`).join('\n')}\n\n**Référentiels (indicatif) :**\n\n${complianceReferences(finding).map((reference) => `- ${formatComplianceReference(reference)}`).join('\n')}`).join('\n\n')
     : 'Aucun constat détecté pour cette policy.'
 
   return `# ${policy.name}

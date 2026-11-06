@@ -59,6 +59,11 @@ const logValue = (value: string): string => {
   return /all/i.test(value) ? 'all' : value.toLowerCase()
 }
 
+const parseHitCount = (value: string): number | undefined => {
+  const digits = value.replace(/[\s\u00a0\u202f,.]/g, '')
+  return /^\d+$/.test(digits) ? Number(digits) : undefined
+}
+
 const REQUIRED_FIELDS = [
   ['srcintf', 'interface entrante'],
   ['dstintf', 'interface sortante'],
@@ -114,7 +119,7 @@ export const parseCsvPolicies = (content: string): { policies: FirewallPolicy[],
       destinationVips: [],
       internetServices: [],
       ipPools: [],
-      hitCount: valueFor(row, 'hitCount') ? Number(valueFor(row, 'hitCount').replace(/\s/g, '')) : undefined,
+      hitCount: parseHitCount(valueFor(row, 'hitCount')),
       lastUsed: valueFor(row, 'lastUsed') || undefined,
       expirationDate: valueFor(row, 'expiration') || undefined,
       ticket: valueFor(row, 'ticket') || undefined,

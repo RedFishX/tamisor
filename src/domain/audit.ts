@@ -19,6 +19,7 @@ export interface FirewallPolicy {
   owner?: string
   temporary?: boolean
   securityProfiles?: string[]
+  securityProfileKinds?: string[]
   inspectionProfile?: string
   governanceGaps?: string[]
   service: string[]

@@ -1125,6 +1125,132 @@ end`
     ]))
   })
 
+  it('ne signale pas comme inutilisé un objet membre d\u2019un groupe référencé', () => {
+    const configuration = `
+config firewall address
+    edit "SRV-A"
+        set subnet 192.0.2.10 255.255.255.255
+    next
+    edit "SRV-B"
+        set subnet 192.0.2.11 255.255.255.255
+    next
+end
+config firewall addrgrp
+    edit "GRP-INNER"
+        set member "SRV-A"
+    next
+    edit "GRP-OUTER"
+        set member "GRP-INNER" "SRV-B"
+    next
+end
+config firewall policy
+    edit 1
+        set srcintf "lan"
+        set dstintf "wan"
+        set srcaddr "GRP-OUTER"
+        set dstaddr "all"
+        set action accept
+        set service "HTTPS"
+        set logtraffic all
+    next
+end`
+
+    const objects = analyzeConfiguration(configuration).findings.filter((finding) => finding.category === 'object')
+    expect(objects).toEqual([])
+  })
+
+  it('signale les objets en doublon sous des noms différents', () => {
+    const configuration = `
+config firewall address
+    edit "WEB-1"
+        set subnet 192.0.2.10 255.255.255.255
+        set comment "primaire"
+    next
+    edit "WEB-1-COPIE"
+        set subnet 192.0.2.10 255.255.255.255
+    next
+end
+config firewall service custom
+    edit "APP-8443"
+        set tcp-portrange 8443
+    next
+    edit "APP-8443-BIS"
+        set tcp-portrange 8443
+    next
+end
+config firewall policy
+    edit 1
+        set srcintf "lan"
+        set dstintf "wan"
+        set srcaddr "WEB-1" "WEB-1-COPIE"
+        set dstaddr "all"
+        set action accept
+        set service "APP-8443" "APP-8443-BIS"
+        set logtraffic all
+    next
+end`
+
+    const findings = analyzeConfiguration(configuration).findings
+    expect(findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ policyId: 'object:address:WEB-1-COPIE', title: 'Objet en doublon' }),
+      expect.objectContaining({ policyId: 'object:service:APP-8443-BIS', title: 'Objet en doublon' }),
+    ]))
+    expect(findings.filter((finding) => finding.title === 'Objet en doublon')).toHaveLength(2)
+  })
+
+  it('signale une policy accept sans aucun profil de sécurité et accepte un profile-group', () => {
+    const configuration = `
+config firewall profile-group
+    edit "PG-STANDARD"
+        set av-profile "default"
+        set ips-sensor "default"
+        set webfilter-profile "default"
+        set ssl-ssh-profile "certificate-inspection"
+    next
+end
+config firewall policy
+    edit 1
+        set srcintf "lan"
+        set dstintf "wan"
+        set srcaddr "LAN-NET"
+        set dstaddr "all"
+        set action accept
+        set service "HTTPS"
+        set logtraffic all
+    next
+    edit 2
+        set srcintf "lan"
+        set dstintf "wan"
+        set srcaddr "DMZ-NET"
+        set dstaddr "all"
+        set action accept
+        set service "HTTPS"
+        set utm-status enable
+        set profile-type group
+        set profile-group "PG-STANDARD"
+        set logtraffic all
+    next
+    edit 3
+        set srcintf "lan"
+        set dstintf "wan"
+        set srcaddr "GUEST-NET"
+        set dstaddr "all"
+        set action accept
+        set service "HTTPS"
+        set utm-status enable
+        set ips-sensor "default"
+        set logtraffic all
+    next
+end`
+
+    const security = analyzeConfiguration(configuration).findings.filter((finding) => finding.category === 'security')
+    expect(security).toHaveLength(2)
+    expect(security).toEqual(expect.arrayContaining([
+      expect.objectContaining({ policyId: '1', title: 'Aucun profil de sécurité', severity: 'medium' }),
+      expect.objectContaining({ policyId: '3', title: 'Profils de sécurité incomplets', severity: 'low' }),
+    ]))
+  })
+
   it('identifie une VIP exposée à toutes les sources et conserve le contexte NAT', () => {
     const natConfiguration = `
 config firewall vip

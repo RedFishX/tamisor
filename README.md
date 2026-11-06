@@ -37,6 +37,12 @@ Depuis le détail d’un constat, `Créer la documentation Markdown` ouvre une f
 
 Les exemples CLI sont des propositions, pas des commandes à appliquer aveuglément. Sauvegardez la configuration, vérifiez les compteurs et le Policy Match, puis testez tout changement sur un périmètre contrôlé.
 
+## Conformité et historique
+
+Chaque constat affiche les exigences de référentiels concernées (PCI-DSS v4.0, CIS FortiGate, ANSSI), dans le détail, l'export CSV, le rapport HTML et la documentation Markdown. La correspondance est indicative.
+
+Après chaque import, la note globale et les compteurs (jamais le contenu de la configuration) sont enregistrés dans IndexedDB, dans le navigateur. Le panneau « Historique des audits » montre l'évolution par nom de fichier.
+
 ## Détection
 
 - Une règle est permissive lorsqu’au moins deux dimensions importantes sont globales (`all`, `ALL` ou `any`).

@@ -13,6 +13,9 @@ import {
   GitCompareArrows,
   Info,
   Moon,
+  PanelLeft,
+  Plus,
+  Search,
   ShieldCheck,
   SquareTerminal,
   Sun,
@@ -25,8 +28,11 @@ import './style.css'
 import { type AuditResult, type Finding, type Severity } from '../domain/audit'
 import { emptyAudit } from '../infrastructure/configuration-import'
 import type { ImportedAuditResult } from '../application/audit-service'
-import { applyMetricFilter, type MetricFilter } from '../application/finding-filters'
-import { renderRecommendation, serializeFindingsCsv } from './recommendation-view'
+import { applyMetricFilter, matchesFindingQuery, type MetricFilter } from '../application/finding-filters'
+import { computeTrend, recordAudit, type HistoryEntry, type HistoryStore } from '../application/audit-history'
+import { createIndexedDbHistoryStore } from '../infrastructure/indexeddb-history-store'
+import { renderHistory } from './history-view'
+import { renderCompliance, renderRecommendation, serializeFindingsCsv } from './recommendation-view'
 import { calculateConfigurationScore, calculateRiskScore } from '../domain/risk-score'
 import { assessPolicyElements, type ElementRiskLevel } from '../domain/policy-risk'
 import { renderExportMenu } from './export-menu'
@@ -76,6 +82,12 @@ let activeDestination = 'all'
 let activeService = 'all'
 let selectedFindingId: string | null = audit.findings[0]?.id ?? null
 let showAcknowledged = false
+let searchQuery = ''
+const compactLayout = window.matchMedia('(max-width: 900px)')
+let historyStore: HistoryStore | null = null
+let historyEntries: HistoryEntry[] = []
+let historyUnavailable = false
+try { historyStore = createIndexedDbHistoryStore() } catch { historyUnavailable = true }
 let acknowledged = new Set<string>(JSON.parse(localStorage.getItem('fortiscope-acknowledged') ?? '[]'))
 let acknowledgementMetadata = new Map<string, AcknowledgementRecord>(Object.entries(JSON.parse(localStorage.getItem('fortiscope-acknowledgement-meta') ?? '{}')) as Array<[string, AcknowledgementRecord]>)
 let pendingAcknowledgement: { key: string, finding: Finding } | null = null
@@ -95,21 +107,29 @@ const escapeHtml = (value: string) =>
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="topbar">
+    <button class="icon-button sidebar-toggle" id="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Afficher la source et l’historique" title="Source et historique">
+      <i data-lucide="panel-left"></i>
+    </button>
     <a class="brand" href="#" aria-label="FortiScope - accueil">
       <span class="brand-mark"><i data-lucide="shield-check"></i></span>
       <span>Forti<span>Scope</span></span>
     </a>
-    <button class="icon-button theme-toggle" id="theme-toggle" type="button" aria-label="Activer le thème sombre" title="Activer le thème sombre"></button>
-    <button class="icon-button mobile-upload" type="button" aria-label="Importer une configuration" title="Importer une configuration">
-      <i data-lucide="upload"></i>
-    </button>
+    <div class="topbar-actions">
+      <button class="secondary-button" id="compare-button" type="button" disabled>
+        <i data-lucide="git-compare-arrows"></i> Comparer
+      </button>
+      ${renderExportMenu(false)}
+      <button class="icon-button theme-toggle" id="theme-toggle" type="button" aria-label="Activer le thème sombre" title="Activer le thème sombre"></button>
+    </div>
+    <input id="compare-input" type="file" accept=".conf,.txt,.csv,text/plain,text/csv" hidden />
+    <input id="ack-import-input" type="file" accept=".json,application/json" hidden />
   </header>
 
   <main class="workspace">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar" aria-label="Source et historique">
       <div>
         <p class="eyebrow">Source de l’audit</p>
-        <label class="dropzone" id="dropzone" for="file-input">
+        <label class="dropzone" id="dropzone" for="file-input" tabindex="0">
           <span class="dropzone-icon"><i data-lucide="upload"></i></span>
           <strong>Déposez votre export FortiGate</strong>
           <small>ou cliquez pour choisir un fichier</small>
@@ -120,27 +140,28 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
       <div class="source-file" id="source-file"></div>
 
+      <section class="history" aria-labelledby="history-title">
+        <div class="history-heading">
+          <p class="eyebrow" id="history-title">Historique de ce fichier</p>
+          <button class="text-button" id="history-clear" type="button" hidden>Effacer</button>
+        </div>
+        <div id="history-content"></div>
+      </section>
+
       <details class="limitations">
         <summary>Limites de l’analyse</summary>
         <p>Les objets dynamiques, les préfixes IPv6 imbriqués et le contenu des objets référencés uniquement par un CSV ne sont pas résolus. Les horaires nommés sont comparés par identité.</p>
       </details>
     </aside>
+    <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
 
     <section class="content">
       <div class="page-heading">
         <div>
           <p class="eyebrow">Revue de configuration</p>
           <h1>Politiques à examiner</h1>
-          <div class="configuration-score" id="configuration-score" aria-label="Note globale de la configuration"></div>
         </div>
-        <div class="heading-actions">
-          <button class="secondary-button" id="compare-button" type="button" disabled>
-            <i data-lucide="git-compare-arrows"></i> Comparer
-          </button>
-          ${renderExportMenu(false)}
-          <input id="compare-input" type="file" accept=".conf,.txt,.csv,text/plain,text/csv" hidden />
-          <input id="ack-import-input" type="file" accept=".json,application/json" hidden />
-        </div>
+        <div class="configuration-score" id="configuration-score" aria-label="Note globale de la configuration"></div>
       </div>
 
       <div class="metrics" id="metrics"></div>
@@ -150,30 +171,40 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
       <section class="audit-panel">
         <div class="toolbar">
-          <label class="select-field">
-            <i data-lucide="filter"></i>
-            <select id="category-filter" aria-label="Filtrer par type">
-              <option value="all">Tous les constats</option>
-              <option value="permissive">Règles permissives</option>
-              <option value="shadowed">Règles masquées</option>
-              <option value="overlap">Chevauchements partiels</option>
-              <option value="duplicate">Règles dupliquées</option>
-              <option value="exposure">VIP exposées</option>
-              <option value="visibility">Visibilité</option>
-                          <option value="unused">Règles inutilisées</option>
-                          <option value="indeterminate">À valider</option>
-                          <option value="temporary">Règles temporaires</option>
-                          <option value="governance">Gouvernance</option>
-                          <option value="security">Profils de sécurité</option>
-                          <option value="inspection">Inspection SSL</option>
-                          <option value="object">Objets</option>
-            </select>
+          <label class="search-field">
+            <i data-lucide="search"></i>
+            <input id="finding-search" type="search" placeholder="Rechercher une politique, une adresse, un service" aria-label="Rechercher dans les constats" autocomplete="off" />
+            <kbd aria-hidden="true">/</kbd>
           </label>
-          <label class="select-field"><span>VDOM</span><select id="vdom-filter" aria-label="Filtrer par VDOM"><option value="all">Tous</option></select></label>
-          <label class="select-field"><span>Interface</span><select id="interface-filter" aria-label="Filtrer par interface"><option value="all">Toutes</option></select></label>
-          <label class="select-field"><span>Source</span><select id="source-filter" aria-label="Filtrer par source"><option value="all">Toutes</option></select></label>
-          <label class="select-field"><span>Destination</span><select id="destination-filter" aria-label="Filtrer par destination"><option value="all">Toutes</option></select></label>
-          <label class="select-field"><span>Service</span><select id="service-filter" aria-label="Filtrer par service"><option value="all">Tous</option></select></label>
+          <div class="filter-chips" id="filter-chips" aria-label="Filtres actifs"></div>
+          <details class="filter-menu" id="filter-menu">
+            <summary class="chip" aria-label="Ajouter un filtre"><i data-lucide="plus"></i> Filtre</summary>
+            <div class="filter-options">
+              <label class="select-field"><span>Type de constat</span>
+                <select id="category-filter" aria-label="Filtrer par type">
+                  <option value="all">Tous les constats</option>
+                  <option value="permissive">Règles permissives</option>
+                  <option value="shadowed">Règles masquées</option>
+                  <option value="overlap">Chevauchements partiels</option>
+                  <option value="duplicate">Règles dupliquées</option>
+                  <option value="exposure">VIP exposées</option>
+                  <option value="visibility">Visibilité</option>
+                  <option value="unused">Règles inutilisées</option>
+                  <option value="indeterminate">À valider</option>
+                  <option value="temporary">Règles temporaires</option>
+                  <option value="governance">Gouvernance</option>
+                  <option value="security">Profils de sécurité</option>
+                  <option value="inspection">Inspection SSL</option>
+                  <option value="object">Objets</option>
+                </select>
+              </label>
+              <label class="select-field"><span>VDOM</span><select id="vdom-filter" aria-label="Filtrer par VDOM"><option value="all">Tous</option></select></label>
+              <label class="select-field"><span>Interface</span><select id="interface-filter" aria-label="Filtrer par interface"><option value="all">Toutes</option></select></label>
+              <label class="select-field"><span>Source</span><select id="source-filter" aria-label="Filtrer par source"><option value="all">Toutes</option></select></label>
+              <label class="select-field"><span>Destination</span><select id="destination-filter" aria-label="Filtrer par destination"><option value="all">Toutes</option></select></label>
+              <label class="select-field"><span>Service</span><select id="service-filter" aria-label="Filtrer par service"><option value="all">Tous</option></select></label>
+            </div>
+          </details>
           <label class="acknowledged-toggle">
             <input id="show-acknowledged" type="checkbox" />
             Afficher les acquittés
@@ -181,9 +212,10 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </div>
 
         <div class="severity-tabs" id="severity-tabs" aria-label="Filtrer par sévérité"></div>
-        <div class="results-layout">
+        <div class="results-layout" id="results-layout">
           <div class="findings-list" id="findings-list"></div>
-          <aside class="finding-detail" id="finding-detail"></aside>
+          <div class="detail-scrim" id="detail-scrim"></div>
+          <aside class="finding-detail" id="finding-detail" aria-label="Détail du constat"></aside>
         </div>
       </section>
     </section>
@@ -217,7 +249,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 `
 
 const renderIcons = () => createIcons({
-  icons: { AlertTriangle, BookOpen, Check, CheckCircle2, ChevronDown, ChevronRight, Clipboard, Download, FileSearch, FileText, Filter, GitCompareArrows, Info, Moon, ShieldCheck, SquareTerminal, Sun, TableProperties, Upload, X },
+  icons: { AlertTriangle, BookOpen, Check, CheckCircle2, ChevronDown, ChevronRight, Clipboard, Download, FileSearch, FileText, Filter, GitCompareArrows, Info, Moon, PanelLeft, Plus, Search, ShieldCheck, SquareTerminal, Sun, TableProperties, Upload, X },
 })
 
 const renderThemeToggle = () => {
@@ -229,10 +261,15 @@ const renderThemeToggle = () => {
   renderIcons()
 }
 
-const filteredFindings = () => filterAcknowledgedFindings(audit.findings, acknowledged, sourceName, showAcknowledged).filter((finding) => {
-  const matchesSeverity = activeSeverity === 'all' || finding.severity === activeSeverity
+const policyForFinding = (finding: Finding) => audit.policies.find((candidate) =>
+  candidate.id === finding.policyId && candidate.vdom === finding.vdom && candidate.family === finding.family,
+)
+
+const filteredFindings = (options: { ignoreSeverity?: boolean } = {}) => filterAcknowledgedFindings(audit.findings, acknowledged, sourceName, showAcknowledged).filter((finding) => {
+  const matchesSeverity = options.ignoreSeverity || activeSeverity === 'all' || finding.severity === activeSeverity
   const matchesCategory = activeCategory === 'all' || finding.category === activeCategory
-  const policy = audit.policies.find((candidate) => candidate.id === finding.policyId && candidate.vdom === finding.vdom && candidate.family === finding.family)
+  const policy = policyForFinding(finding)
+  if (!matchesFindingQuery(finding, policy, searchQuery)) return false
   const matchesVdom = activeVdom === 'all' || (policy?.vdom ?? 'global') === activeVdom
   const matchesInterface = activeInterface === 'all' || [...(policy?.srcintf ?? []), ...(policy?.dstintf ?? [])].includes(activeInterface)
   const matchesSource = activeSource === 'all' || (policy?.srcaddr ?? []).includes(activeSource)
@@ -255,6 +292,38 @@ const renderContextFilters = () => {
     const select = document.querySelector<HTMLSelectElement>(`#${id}`)
     if (select) select.innerHTML = options(values, selected, id === 'vdom-filter' ? 'Tous' : id === 'service-filter' ? 'Tous' : 'Toutes')
   }
+  document.querySelector<HTMLSelectElement>('#category-filter')!.value = activeCategory
+  renderFilterChips()
+}
+
+const categoryOptionLabel = (value: string) =>
+  document.querySelector<HTMLOptionElement>(`#category-filter option[value="${CSS.escape(value)}"]`)?.textContent ?? value
+
+const renderFilterChips = () => {
+  const chips: Array<[string, string, string]> = [
+    ['category', 'Type', activeCategory === 'all' ? '' : categoryOptionLabel(activeCategory)],
+    ['vdom', 'VDOM', activeVdom === 'all' ? '' : activeVdom],
+    ['interface', 'Interface', activeInterface === 'all' ? '' : activeInterface],
+    ['source', 'Source', activeSource === 'all' ? '' : activeSource],
+    ['destination', 'Destination', activeDestination === 'all' ? '' : activeDestination],
+    ['service', 'Service', activeService === 'all' ? '' : activeService],
+  ]
+  document.querySelector<HTMLDivElement>('#filter-chips')!.innerHTML = chips
+    .filter(([, , value]) => value)
+    .map(([key, label, value]) => `
+      <button class="chip" type="button" data-clear-filter="${key}" aria-label="Retirer le filtre ${escapeHtml(label)} ${escapeHtml(value)}">
+        ${escapeHtml(label)} <b>${escapeHtml(value)}</b><i data-lucide="x"></i>
+      </button>
+    `).join('')
+}
+
+const clearFilter = (key: string) => {
+  if (key === 'category') activeCategory = 'all'
+  if (key === 'vdom') activeVdom = 'all'
+  if (key === 'interface') activeInterface = 'all'
+  if (key === 'source') activeSource = 'all'
+  if (key === 'destination') activeDestination = 'all'
+  if (key === 'service') activeService = 'all'
 }
 
 const renderSource = () => {
@@ -278,14 +347,22 @@ const renderSource = () => {
   `
 }
 
+const acknowledgedCount = () => sourceName
+  ? audit.findings.filter((finding) => acknowledged.has(acknowledgementKey(sourceName, finding))).length
+  : 0
+
 const renderMetrics = () => {
+  if (!sourceName) {
+    document.querySelector<HTMLDivElement>('#metrics')!.innerHTML = ''
+    return
+  }
   const metricFilters = [
-    ['Alertes critiques', audit.stats.critical, 'critical', 'critical'],
-    ['Règles permissives', audit.stats.permissive, 'warning', 'permissive'],
-    ['Règles masquées', audit.stats.shadowed, 'shadowed', 'shadowed'],
+    ['Critiques', audit.stats.critical, audit.stats.critical > 0 ? 'critical' : '', 'critical'],
+    ['Permissives', audit.stats.permissive, '', 'permissive'],
+    ['Masquées', audit.stats.shadowed, '', 'shadowed'],
   ] as const
   document.querySelector<HTMLDivElement>('#metrics')!.innerHTML = `
-    <article class="metric neutral">
+    <article class="metric">
       <span>Politiques actives</span>
       <strong>${audit.stats.activePolicies}</strong>
     </article>
@@ -299,26 +376,47 @@ const renderMetrics = () => {
         </button>
       `
     }).join('')}
+    <button class="metric ${showAcknowledged ? 'active' : ''}" type="button" data-metric-acknowledged aria-pressed="${showAcknowledged}" title="Afficher ou masquer les constats acquittés">
+      <span>Acquittés</span>
+      <strong>${acknowledgedCount()}</strong>
+    </button>
   `
+}
+
+const formatShortDate = (iso: string) => {
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
 }
 
 const renderConfigurationScore = () => {
+  const container = document.querySelector<HTMLDivElement>('#configuration-score')!
+  if (!sourceName) {
+    container.className = 'configuration-score'
+    container.innerHTML = ''
+    return
+  }
   const score = calculateConfigurationScore(audit)
   const tone = score >= 80 ? 'good' : score >= 60 ? 'warning' : 'critical'
-  document.querySelector<HTMLDivElement>('#configuration-score')!.innerHTML = `
-    <span>Note globale</span><strong class="${tone}">${score}<small>/100</small></strong>
-  `
+  const trend = computeTrend(historyEntries, sourceName)
+  const delta = trend?.previous && trend.scoreDelta !== undefined
+    ? `${trend.scoreDelta > 0 ? '+' : ''}${trend.scoreDelta} depuis le ${formatShortDate(trend.previous.analyzedAt)}`
+    : ''
+  container.className = `configuration-score ${tone}`
+  container.innerHTML = `<strong>${score}<small>/100</small></strong>${delta ? `<span>${escapeHtml(delta)}</span>` : ''}`
 }
 
 const renderTabs = () => {
+  const visible = filteredFindings({ ignoreSeverity: true })
+  const count = (severity: Severity) => visible.filter((finding) => finding.severity === severity).length
   const tabs: Array<[string, string, number]> = [
-    ['all', 'Toutes', audit.findings.length],
-    ['critical', 'Critiques', audit.stats.critical],
-    ['high', 'Élevées', audit.stats.high],
-    ['medium', 'Moyennes', audit.findings.filter((finding) => finding.severity === 'medium').length],
+    ['all', 'Tous', visible.length],
+    ['critical', 'Critiques', count('critical')],
+    ['high', 'Élevés', count('high')],
+    ['medium', 'Moyens', count('medium')],
+    ['low', 'Faibles', count('low')],
   ]
   document.querySelector<HTMLDivElement>('#severity-tabs')!.innerHTML = tabs.map(([value, label, count]) => `
-    <button type="button" data-severity="${value}" class="${activeSeverity === value ? 'active' : ''}">
+    <button type="button" data-severity="${value}" class="${activeSeverity === value ? 'active' : ''}" aria-pressed="${activeSeverity === value}">
       ${label}<span>${count}</span>
     </button>
   `).join('')
@@ -333,15 +431,14 @@ const renderDetail = (finding: Finding | undefined) => {
   const findingKey = acknowledgementKey(sourceName, finding)
   const isAcknowledged = acknowledged.has(findingKey)
   const acknowledgement = acknowledgementMetadata.get(findingKey)
-  const policy = audit.policies.find((candidate) =>
-    candidate.id === finding.policyId && candidate.vdom === finding.vdom && candidate.family === finding.family,
-  )
+  const policy = policyForFinding(finding)
   const riskScore = calculateRiskScore(finding, 'standard')
   const elementRisks = policy ? assessPolicyElements(policy) : []
   detail.innerHTML = `
+    <button class="icon-button detail-close" type="button" data-close-detail aria-label="Fermer le détail" title="Fermer"><i data-lucide="x"></i></button>
     <div class="detail-header">
       <span class="severity-badge ${finding.severity}">${severityLabels[finding.severity]}</span>
-      <span>Règle #${escapeHtml(finding.policyId)}</span>
+      <span>${escapeHtml(categoryLabels[finding.category])} · règle #${escapeHtml(finding.policyId)} · seq ${finding.order}</span>
       <strong class="risk-score">Risque ${riskScore}/100</strong>
     </div>
     <h2>${escapeHtml(finding.title)}</h2>
@@ -371,19 +468,34 @@ const renderDetail = (finding: Finding | undefined) => {
       ${finding.evidence.map((item) => `<p><i data-lucide="alert-triangle"></i>${escapeHtml(item)}</p>`).join('')}
     </div>
     ${renderRecommendation(finding.recommendation)}
-    <button class="acknowledge-button ${isAcknowledged ? 'restore' : ''}" type="button" data-acknowledge="${escapeHtml(finding.id)}">
-      <i data-lucide="check"></i>${isAcknowledged ? 'Restaurer le constat' : 'Acquitter le constat'}
-    </button>
-    ${policy ? `<button class="policy-doc-button" type="button" data-policy-doc="${escapeHtml(finding.id)}"><i data-lucide="book-open"></i>Créer la documentation Markdown</button>` : ''}
+    ${renderCompliance(finding)}
+    <div class="detail-actions">
+      <button class="acknowledge-button ${isAcknowledged ? 'restore' : ''}" type="button" data-acknowledge="${escapeHtml(finding.id)}" aria-keyshortcuts="A">
+        <i data-lucide="check"></i>${isAcknowledged ? 'Restaurer le constat' : 'Acquitter le constat'}<kbd aria-hidden="true">A</kbd>
+      </button>
+      ${policy ? `<button class="policy-doc-button" type="button" data-policy-doc="${escapeHtml(finding.id)}"><i data-lucide="book-open"></i>Documentation Markdown</button>` : ''}
+    </div>
   `
 }
+
+const hasActiveFilters = () => Boolean(searchQuery.trim()) || [activeSeverity, activeCategory, activeVdom, activeInterface, activeSource, activeDestination, activeService].some((value) => value !== 'all')
+
+const renderNoResult = () => hasActiveFilters()
+  ? `<div class="empty-list"><i data-lucide="filter"></i><strong>Aucun constat pour ces filtres</strong><span>Élargissez la recherche ou retirez un filtre.</span><button class="secondary-button" type="button" data-reset-filters>Retirer tous les filtres</button></div>`
+  : `<div class="empty-list"><i data-lucide="check-circle-2"></i><strong>Aucun constat</strong><span>Aucune règle ne présente de problème détecté par l’analyse.</span></div>`
 
 const renderFindings = () => {
   const findings = filteredFindings()
   if (!findings.some((finding) => finding.id === selectedFindingId)) selectedFindingId = findings[0]?.id ?? null
   const list = document.querySelector<HTMLDivElement>('#findings-list')!
+  if (!sourceName) {
+    list.innerHTML = `<div class="empty-list"><i data-lucide="upload"></i><strong>Aucune configuration analysée</strong><span>Importez un export FortiGate (.conf, .txt ou .csv). L’analyse se fait dans votre navigateur, aucun fichier n’est envoyé.</span><label class="secondary-button" for="file-input" tabindex="0"><i data-lucide="upload"></i> Choisir un fichier</label></div>`
+    document.querySelector<HTMLElement>('#finding-detail')!.innerHTML = `<div class="empty-detail"><i data-lucide="file-search"></i><span>Le détail de chaque constat et son plan de remédiation s’afficheront ici.</span></div>`
+    renderIcons()
+    return
+  }
   list.innerHTML = findings.length ? findings.map((finding) => `
-    <button type="button" class="finding-row ${finding.id === selectedFindingId ? 'selected' : ''}" data-finding-id="${finding.id}">
+    <button type="button" class="finding-row ${finding.id === selectedFindingId ? 'selected' : ''}" data-finding-id="${finding.id}" aria-current="${finding.id === selectedFindingId}">
       <span class="severity-line ${finding.severity}"></span>
       <span class="finding-main">
         <span class="finding-meta"><span class="severity-badge ${finding.severity}">${severityLabels[finding.severity]}</span>${categoryLabels[finding.category]}</span>
@@ -392,13 +504,33 @@ const renderFindings = () => {
       </span>
       <i data-lucide="chevron-right"></i>
     </button>
-  `).join('') : `<div class="empty-list"><i data-lucide="check-circle-2"></i><strong>Aucun résultat</strong><span>Aucun constat ne correspond aux filtres actuels.</span></div>`
+  `).join('') : renderNoResult()
   renderDetail(findings.find((finding) => finding.id === selectedFindingId))
   renderIcons()
 }
 
+const renderHistoryPanel = () => {
+  document.querySelector<HTMLDivElement>('#history-content')!.innerHTML = sourceName
+    ? renderHistory(historyEntries, sourceName, historyUnavailable)
+    : '<p class="history-empty">Importez une configuration pour suivre sa note dans le temps.</p>'
+  document.querySelector<HTMLButtonElement>('#history-clear')!.hidden = !historyEntries.length
+}
+
+const refreshHistory = async () => {
+  if (!historyStore) return
+  try {
+    historyEntries = await recordAudit(historyStore, audit, sourceName)
+    historyUnavailable = false
+  } catch {
+    historyUnavailable = true
+  }
+  renderHistoryPanel()
+  renderConfigurationScore()
+}
+
 const renderAll = () => {
   renderSource()
+  renderHistoryPanel()
   renderConfigurationScore()
   renderContextFilters()
   renderMetrics()
@@ -413,6 +545,7 @@ const renderAll = () => {
 
 const renderImportErrors = (errors: string[]) => {
   const feedback = document.querySelector<HTMLDivElement>('#import-feedback')!
+  feedback.classList.remove('is-progress')
   feedback.hidden = errors.length === 0
   feedback.innerHTML = errors.length
     ? `<i data-lucide="alert-triangle"></i><div><strong>Import impossible</strong>${errors.map((error) => `<p>${escapeHtml(error)}</p>`).join('')}</div>`
@@ -423,7 +556,8 @@ const renderImportErrors = (errors: string[]) => {
 const renderImportProgress = (message: string) => {
   const feedback = document.querySelector<HTMLDivElement>('#import-feedback')!
   feedback.hidden = false
-  feedback.innerHTML = `<div>${escapeHtml(message)}</div>`
+  feedback.classList.add('is-progress')
+  feedback.innerHTML = `<div role="status">${escapeHtml(message)}</div>`
 }
 
 const analyzeWithWorker = (content: string, fileName: string): Promise<ImportedAuditResult> => new Promise((resolve, reject) => {
@@ -452,6 +586,7 @@ const loadConfiguration = async (content: string, name: string) => {
   sourceName = name
   selectedFindingId = audit.findings[0]?.id ?? null
   renderAll()
+  await refreshHistory()
 }
 
 const handleFile = async (file?: File) => {
@@ -466,7 +601,12 @@ const handleFile = async (file?: File) => {
 document.querySelector<HTMLInputElement>('#file-input')!.addEventListener('change', (event) => {
   void handleFile((event.target as HTMLInputElement).files?.[0])
 })
-document.querySelector<HTMLButtonElement>('.mobile-upload')!.addEventListener('click', () => document.querySelector<HTMLInputElement>('#file-input')!.click())
+document.querySelector<HTMLButtonElement>('#history-clear')!.addEventListener('click', async () => {
+  if (!historyStore || !window.confirm('Effacer l’historique de tous les audits enregistrés dans ce navigateur ?')) return
+  try { await historyStore.clear() } catch { historyUnavailable = true }
+  historyEntries = []
+  renderHistoryPanel()
+})
 document.querySelector<HTMLButtonElement>('#theme-toggle')!.addEventListener('click', () => {
   resolvedTheme = toggleTheme(resolvedTheme)
   document.documentElement.dataset.theme = resolvedTheme
@@ -491,8 +631,7 @@ document.querySelector<HTMLInputElement>('#compare-input')!.addEventListener('ch
 })
 document.querySelector<HTMLSelectElement>('#category-filter')!.addEventListener('change', (event) => {
   activeCategory = (event.target as HTMLSelectElement).value
-  renderMetrics()
-  renderFindings()
+  refreshFindingsView()
 })
 const contextFilters: Array<[string, (value: string) => void]> = [
   ['vdom-filter', (value) => { activeVdom = value }],
@@ -504,22 +643,26 @@ const contextFilters: Array<[string, (value: string) => void]> = [
 for (const [id, update] of contextFilters) {
   document.querySelector<HTMLSelectElement>(`#${id}`)!.addEventListener('change', (event) => {
     update((event.target as HTMLSelectElement).value)
-    renderFindings()
+    refreshFindingsView()
   })
 }
 document.querySelector<HTMLInputElement>('#show-acknowledged')!.addEventListener('change', (event) => {
   showAcknowledged = (event.target as HTMLInputElement).checked
-  renderFindings()
+  refreshFindingsView()
 })
 document.querySelector<HTMLDivElement>('#severity-tabs')!.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-severity]')
   if (!button) return
   activeSeverity = button.dataset.severity ?? 'all'
-  renderMetrics()
-  renderTabs()
-  renderFindings()
+  refreshFindingsView()
 })
 document.querySelector<HTMLDivElement>('#metrics')!.addEventListener('click', (event) => {
+  if ((event.target as HTMLElement).closest('[data-metric-acknowledged]')) {
+    showAcknowledged = !showAcknowledged
+    document.querySelector<HTMLInputElement>('#show-acknowledged')!.checked = showAcknowledged
+    refreshFindingsView()
+    return
+  }
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-metric-filter]')
   if (!button) return
   const filters = applyMetricFilter(
@@ -528,24 +671,38 @@ document.querySelector<HTMLDivElement>('#metrics')!.addEventListener('click', (e
   )
   activeSeverity = filters.severity
   activeCategory = filters.category
-  document.querySelector<HTMLSelectElement>('#category-filter')!.value = activeCategory
-  renderMetrics()
-  renderTabs()
-  renderFindings()
+  refreshFindingsView()
 })
 document.querySelector<HTMLDivElement>('#findings-list')!.addEventListener('click', (event) => {
   const row = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-finding-id]')
-  if (!row) return
-  selectedFindingId = row.dataset.findingId ?? null
-  renderFindings()
+  if (row) {
+    selectFinding(row.dataset.findingId ?? null)
+    if (compactLayout.matches) openDetailSheet()
+    return
+  }
+  if ((event.target as HTMLElement).closest('[data-reset-filters]')) {
+    searchQuery = ''
+    document.querySelector<HTMLInputElement>('#finding-search')!.value = ''
+    activeSeverity = 'all'
+    for (const key of ['category', 'vdom', 'interface', 'source', 'destination', 'service']) clearFilter(key)
+    renderContextFilters()
+    refreshFindingsView()
+  }
 })
 document.querySelector<HTMLElement>('#finding-detail')!.addEventListener('click', (event) => {
+  if ((event.target as HTMLElement).closest('[data-close-detail]')) {
+    closeDetailSheet()
+    return
+  }
+  const copyButton = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-copy-cli]')
+  if (copyButton) {
+    copyCli(copyButton)
+    return
+  }
   const documentationButton = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-policy-doc]')
   if (documentationButton) {
     const finding = audit.findings.find((candidate) => candidate.id === documentationButton.dataset.policyDoc)
-    const policy = finding && audit.policies.find((candidate) =>
-      candidate.id === finding.policyId && candidate.vdom === finding.vdom && candidate.family === finding.family,
-    )
+    const policy = finding && policyForFinding(finding)
     if (finding && policy) {
       const relatedFindings = audit.findings.filter((candidate) =>
         candidate.policyId === policy.id && candidate.vdom === policy.vdom && candidate.family === policy.family,
@@ -577,7 +734,7 @@ document.querySelector<HTMLElement>('#finding-detail')!.addEventListener('click'
   acknowledged = toggleAcknowledgement(acknowledged, key)
   localStorage.setItem('fortiscope-acknowledged', JSON.stringify([...acknowledged]))
   localStorage.setItem('fortiscope-acknowledgement-meta', JSON.stringify(Object.fromEntries(acknowledgementMetadata)))
-  renderFindings()
+  refreshFindingsView()
 })
 
 document.querySelector<HTMLButtonElement>('#close-markdown')!.addEventListener('click', () => {
@@ -606,12 +763,18 @@ document.querySelector<HTMLFormElement>('#acknowledgement-form')!.addEventListen
   const reviewDate = document.querySelector<HTMLInputElement>('#acknowledgement-review-date')!.value
   if (!justification || !reviewDate) return
   const { key } = pendingAcknowledgement
+  const previousList = filteredFindings()
+  const previousIndex = previousList.findIndex((finding) => finding.id === selectedFindingId)
   acknowledgementMetadata.set(key, { key, justification, reviewDate, acknowledgedAt: new Date().toISOString() })
   acknowledged = toggleAcknowledgement(acknowledged, key)
   localStorage.setItem('fortiscope-acknowledged', JSON.stringify([...acknowledged]))
   localStorage.setItem('fortiscope-acknowledgement-meta', JSON.stringify(Object.fromEntries(acknowledgementMetadata)))
   closeAcknowledgementDialog()
-  renderFindings()
+  const nextList = filteredFindings()
+  if (!nextList.some((finding) => finding.id === selectedFindingId) && nextList.length) {
+    selectedFindingId = nextList[Math.min(Math.max(previousIndex, 0), nextList.length - 1)].id
+  }
+  refreshFindingsView()
 })
 
 const dropzone = document.querySelector<HTMLLabelElement>('#dropzone')!
@@ -672,11 +835,136 @@ document.querySelector<HTMLInputElement>('#ack-import-input')!.addEventListener(
       }
       localStorage.setItem('fortiscope-acknowledged', JSON.stringify([...acknowledged]))
       localStorage.setItem('fortiscope-acknowledgement-meta', JSON.stringify(Object.fromEntries(acknowledgementMetadata)))
-      renderFindings()
+      refreshFindingsView()
     } catch {
       renderImportErrors(['Fichier d’acquittements invalide.'])
     }
   })
+})
+
+const refreshFindingsView = () => {
+  renderFilterChips()
+  renderMetrics()
+  renderTabs()
+  renderFindings()
+}
+
+const selectFinding = (id: string | null) => {
+  selectedFindingId = id
+  renderFindings()
+  document.querySelector<HTMLButtonElement>(`[data-finding-id="${CSS.escape(id ?? '')}"]`)?.scrollIntoView({ block: 'nearest' })
+}
+
+const moveSelection = (step: number) => {
+  const findings = filteredFindings()
+  if (!findings.length) return
+  const index = findings.findIndex((finding) => finding.id === selectedFindingId)
+  const next = findings[Math.min(Math.max(index + step, 0), findings.length - 1)]
+  selectFinding(next.id)
+  document.querySelector<HTMLButtonElement>(`[data-finding-id="${CSS.escape(next.id)}"]`)?.focus()
+}
+
+const copyCli = (button: HTMLButtonElement) => {
+  const code = button.closest('.cli-preview')?.querySelector('code')?.textContent ?? ''
+  const done = () => {
+    button.textContent = 'Copié'
+    window.setTimeout(() => { button.textContent = 'Copier' }, 2000)
+  }
+  void (navigator.clipboard?.writeText(code) ?? Promise.reject(new Error('clipboard'))).then(done, () => {
+    const range = document.createRange()
+    const target = button.closest('.cli-preview')?.querySelector('code')
+    if (!target) return
+    range.selectNodeContents(target)
+    window.getSelection()?.removeAllRanges()
+    window.getSelection()?.addRange(range)
+  })
+}
+
+const openDetailSheet = () => document.querySelector<HTMLDivElement>('#results-layout')!.classList.add('detail-open')
+const closeDetailSheet = () => document.querySelector<HTMLDivElement>('#results-layout')!.classList.remove('detail-open')
+document.querySelector<HTMLDivElement>('#detail-scrim')!.addEventListener('click', closeDetailSheet)
+
+const sidebar = document.querySelector<HTMLElement>('#sidebar')!
+const sidebarToggle = document.querySelector<HTMLButtonElement>('#sidebar-toggle')!
+const sidebarScrim = document.querySelector<HTMLDivElement>('#sidebar-scrim')!
+const setSidebarOpen = (open: boolean) => {
+  sidebar.classList.toggle('open', open)
+  sidebarScrim.hidden = !open
+  sidebarToggle.setAttribute('aria-expanded', String(open))
+}
+sidebarToggle.addEventListener('click', () => setSidebarOpen(!sidebar.classList.contains('open')))
+sidebarScrim.addEventListener('click', () => setSidebarOpen(false))
+compactLayout.addEventListener('change', () => {
+  setSidebarOpen(false)
+  closeDetailSheet()
+})
+
+let searchTimer: number | undefined
+document.querySelector<HTMLInputElement>('#finding-search')!.addEventListener('input', (event) => {
+  window.clearTimeout(searchTimer)
+  const value = (event.target as HTMLInputElement).value
+  searchTimer = window.setTimeout(() => {
+    searchQuery = value
+    refreshFindingsView()
+  }, 150)
+})
+document.querySelector<HTMLDivElement>('#filter-chips')!.addEventListener('click', (event) => {
+  const chip = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-clear-filter]')
+  if (!chip) return
+  clearFilter(chip.dataset.clearFilter ?? '')
+  renderContextFilters()
+  refreshFindingsView()
+})
+document.querySelector<HTMLDetailsElement>('#filter-menu')!.addEventListener('change', () => {
+  document.querySelector<HTMLDetailsElement>('#filter-menu')!.open = false
+})
+document.addEventListener('keydown', (event) => {
+  if (!(event.target instanceof HTMLLabelElement) || event.target.htmlFor !== 'file-input') return
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    document.querySelector<HTMLInputElement>('#file-input')!.click()
+  }
+})
+
+const isTyping = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+
+const inFindingsList = (target: EventTarget | null) =>
+  target instanceof HTMLElement && Boolean(target.closest('#findings-list'))
+
+document.addEventListener('keydown', (event) => {
+  if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+  if (document.querySelector('dialog[open]')) return
+  const search = document.querySelector<HTMLInputElement>('#finding-search')!
+  if (event.key === 'Escape') {
+    if (document.activeElement === search && search.value) {
+      search.value = ''
+      searchQuery = ''
+      refreshFindingsView()
+      return
+    }
+    document.querySelectorAll<HTMLDetailsElement>('#filter-menu[open], #export-menu[open]').forEach((menu) => { menu.open = false })
+    closeDetailSheet()
+    setSidebarOpen(false)
+    return
+  }
+  if (isTyping(event.target) || !sourceName) return
+  const key = event.key.toLowerCase()
+  if (event.key === '/') {
+    event.preventDefault()
+    search.focus()
+  } else if (key === 'j' || (event.key === 'ArrowDown' && inFindingsList(event.target))) {
+    event.preventDefault()
+    moveSelection(1)
+  } else if (key === 'k' || (event.key === 'ArrowUp' && inFindingsList(event.target))) {
+    event.preventDefault()
+    moveSelection(-1)
+  } else if (key === 'a') {
+    document.querySelector<HTMLButtonElement>('#finding-detail [data-acknowledge]')?.click()
+  } else if (key === 'c') {
+    const button = document.querySelector<HTMLButtonElement>('#finding-detail [data-copy-cli]')
+    if (button) copyCli(button)
+  }
 })
 
 renderAll()

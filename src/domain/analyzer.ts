@@ -97,6 +97,7 @@ const parsePolicies = (
 ): FirewallPolicy[] => {
   const vipNames = new Set(parseSection(configuration, 'firewall vip').keys())
   const dynamicNames = dynamicAddressNames(configuration)
+  const profileGroups = parseSection(configuration, 'firewall profile-group')
   return [...parseSection(configuration, sectionName)].map(([id, fields], order) => {
     const name = field(fields, 'name')[0]
     const comments = field(fields, 'comments').join(' ')
@@ -105,9 +106,16 @@ const parsePolicies = (
       || comments.match(/\b(?:ticket|change)\s*[:#-]?\s*([A-Z]{2,}-\d+|\w+)/i)?.[1]
     const owner = field(fields, 'owner', field(fields, 'policy-owner'))[0]
       || comments.match(/\bowner\s*[:#-]?\s*([\w.-]+)/i)?.[1]
-    const securityProfiles = ['av-profile', 'webfilter-profile', 'application-list', 'ips-sensor', 'dnsfilter-profile']
-      .flatMap((key) => field(fields, key))
-    const inspectionProfile = field(fields, 'ssl-ssh-profile')[0]
+    const profileGroupName = field(fields, 'profile-group')[0]
+    const profileGroup = profileGroupName ? profileGroups.get(profileGroupName) : undefined
+    const profileKeys = ['av-profile', 'webfilter-profile', 'application-list', 'ips-sensor', 'dnsfilter-profile']
+    const profileValues = (key: string) => [...field(fields, key), ...(profileGroup ? field(profileGroup, key) : [])]
+    const securityProfileKinds = profileKeys.filter((key) => profileValues(key).length)
+    const securityProfiles = [
+      ...profileKeys.flatMap(profileValues),
+      ...(profileGroupName && !profileGroup ? [profileGroupName] : []),
+    ]
+    const inspectionProfile = profileValues('ssl-ssh-profile')[0]
     const temporary = field(fields, 'temporary')[0] === 'enable' || Boolean(expirationDate) || /\btemporary\b|\btemporaire\b/i.test(comments)
     const governanceGaps = [
       !name ? 'Nom de règle absent' : '',
@@ -149,6 +157,7 @@ const parsePolicies = (
     owner,
     temporary,
     securityProfiles,
+    securityProfileKinds,
     inspectionProfile,
     governanceGaps,
   }
@@ -172,6 +181,20 @@ const buildGroupResolver = (configuration: string, sectionName: string) => {
     return resolved
   }
   return resolve
+}
+
+/** Le même ensemble de noms est comparé à chaque paire de policies : on ne développe les groupes qu'une fois. */
+const memoizeExpansion = (resolve: (names: string[]) => Set<string>) => {
+  const cache = new Map<string, string[]>()
+  return (names: string[]): string[] => {
+    const key = names.join('\u0000')
+    let value = cache.get(key)
+    if (!value) {
+      value = [...resolve(names)]
+      cache.set(key, value)
+    }
+    return value
+  }
 }
 
 interface SpaceMatcher {
@@ -199,7 +222,7 @@ const buildSpaceMatcher = (
   resolve: ReturnType<typeof buildGroupResolver>,
   intervalsFor: (name: string) => Interval[] | undefined = () => undefined,
 ): SpaceMatcher => {
-  const expanded = (names: string[]) => [...resolve(names)]
+  const expanded = memoizeExpansion(resolve)
   const entityContains = (container: string, candidate: string) => {
     if (container === candidate) return true
     const containerIntervals = intervalsFor(container)
@@ -445,7 +468,7 @@ const buildServiceMatcher = (configuration: string): SpaceMatcher => {
     if (atoms.length) definitions.set(name.toLowerCase(), atoms)
   }
   const resolve = buildGroupResolver(configuration, 'firewall service group')
-  const expanded = (names: string[]) => [...resolve(names)]
+  const expanded = memoizeExpansion(resolve)
   const entityContains = (container: string, candidate: string): boolean => {
     if (container === candidate) return true
     const containerAtoms = definitions.get(container)
@@ -554,19 +577,22 @@ const permissiveFinding = (policy: FirewallPolicy): Finding | null => {
   const universalAddresses = ['all', 'all_ipv4', 'all_ipv6']
   const hasAllSource = policy.srcaddr.some((value) => universalAddresses.includes(value.toLowerCase()))
   const hasAllDestination = policy.dstaddr.some((value) => universalAddresses.includes(value.toLowerCase()))
-  const hasAllServices = policy.service.some((value) => value.toLowerCase() === 'all')
+  const broadServices = policy.service.filter((value) => ['all', 'all_tcp', 'all_udp', 'all_sctp'].includes(value.toLowerCase()))
+  const hasAllServices = broadServices.length > 0
   const hasAnyInterface = [...policy.srcintf, ...policy.dstintf].some((value) => value.toLowerCase() === 'any')
 
   if (hasAllSource) evidence.push('Source: all')
   if (hasAllDestination) evidence.push('Destination: all')
-  if (hasAllServices) evidence.push('Service: ALL')
+  if (hasAllServices) evidence.push(`Service: ${broadServices.join(', ')}`)
   if (hasAnyInterface) evidence.push('Interface: any')
   if (policy.schedule.some((value) => value.toLowerCase() === 'always')) evidence.push('Horaire: always')
   if (policy.utmStatus !== 'enable') evidence.push('Profils de sécurité: désactivés')
 
   const broadDimensions = [hasAllSource, hasAllDestination, hasAllServices, hasAnyInterface].filter(Boolean).length
-  if (broadDimensions < 2) return null
-  const severity: Severity = broadDimensions >= 3 ? 'critical' : 'high'
+  if (broadDimensions < 2 && !hasAnyInterface) return null
+  // Une interface « any » isolée n'est pas une règle permissive, mais elle étend la règle à tous les chemins réseau.
+  const interfaceOnly = broadDimensions < 2
+  const severity: Severity = interfaceOnly ? 'medium' : broadDimensions >= 3 ? 'critical' : 'high'
   const actions: string[] = []
   const cliChanges: string[] = []
   if (hasAllSource) {
@@ -578,7 +604,7 @@ const permissiveFinding = (policy: FirewallPolicy): Finding | null => {
     cliChanges.push('set dstaddr "<groupe-destinations-validé>"')
   }
   if (hasAllServices) {
-    actions.push('Remplacer ALL par les services applicatifs strictement requis.')
+    actions.push('Remplacer ALL, ALL_TCP et ALL_UDP par les services applicatifs strictement requis.')
     cliChanges.push('set service "<groupe-services-validé>"')
   }
   if (hasAnyInterface) actions.push('Sélectionner explicitement les interfaces d’entrée et de sortie attendues.')
@@ -592,8 +618,10 @@ const permissiveFinding = (policy: FirewallPolicy): Finding | null => {
     order: policy.order,
     severity,
     category: 'permissive',
-    title: severity === 'critical' ? 'Règle très permissive' : 'Périmètre trop large',
-    detail: 'Cette règle autorise plusieurs dimensions sans restriction. Vérifiez que son périmètre correspond au besoin métier.',
+    title: interfaceOnly ? 'Interfaces non restreintes' : severity === 'critical' ? 'Règle très permissive' : 'Périmètre trop large',
+    detail: interfaceOnly
+      ? 'Cette règle utilise l’interface « any » : elle s’applique à tous les chemins réseau, y compris ceux qui n’étaient pas prévus.'
+      : 'Cette règle autorise plusieurs dimensions sans restriction. Vérifiez que son périmètre correspond au besoin métier.',
     evidence,
     recommendation: {
       summary: 'Appliquer le principe du moindre privilège à chaque critère de correspondance de la politique.',
@@ -635,7 +663,7 @@ const exposureFinding = (policy: FirewallPolicy): Finding | null => {
 const unusedFinding = (policy: FirewallPolicy): Finding | null => {
   if (policy.status === 'disable') return null
   const staleCutoff = Date.now() - 90 * 24 * 60 * 60 * 1000
-  const neverUsed = policy.hitCount === 0
+  const neverUsed = policy.hitCount === 0 || (policy.lastUsed !== undefined && /^(never|jamais)$/i.test(policy.lastUsed.trim()))
   const stale = policy.lastUsed !== undefined && !Number.isNaN(Date.parse(policy.lastUsed)) && Date.parse(policy.lastUsed) < staleCutoff
   if (!neverUsed && !stale) return null
   const reason = neverUsed ? 'aucune correspondance enregistrée' : `dernière utilisation le ${policy.lastUsed}`
@@ -755,22 +783,67 @@ const governanceFinding = (policy: FirewallPolicy): Finding | null => {
 }
 
 const securityFinding = (policy: FirewallPolicy): Finding | null => {
-  if (policy.status === 'disable' || policy.action !== 'accept' || policy.utmStatus !== 'enable' || policy.securityProfiles?.length) return null
-  return {
+  if (policy.status === 'disable' || policy.action !== 'accept') return null
+  const base = {
     id: findingId('security', policy),
     policyId: policy.id,
     vdom: policy.vdom,
     family: policy.family,
     policyName: policy.name,
     order: policy.order,
-    severity: 'high',
-    category: 'security',
-    title: 'Profils de sécurité non identifiés',
-    detail: 'La policy indique que les profils UTM sont activés, mais aucun profil IPS, antivirus, Web ou applicatif n’a été identifié dans l’export.',
-    evidence: ['utm-status: enable', 'Aucun profil de sécurité référencé'],
+    category: 'security' as const,
+  }
+  // securityProfiles n'est renseigné que par l'import CLI : un CSV (colonne « Security Profiles ») ne détaille pas les profils.
+  if (policy.utmStatus === 'enable' && policy.securityProfiles && !policy.securityProfiles.length) {
+    return {
+      ...base,
+      severity: 'high',
+      title: 'Profils de sécurité non identifiés',
+      detail: 'La policy indique que les profils UTM sont activés, mais aucun profil IPS, antivirus, Web ou applicatif n’a été identifié dans l’export.',
+      evidence: ['utm-status: enable', 'Aucun profil de sécurité référencé'],
+      recommendation: {
+        summary: 'Vérifier les profils réellement associés à cette policy sur le FortiGate.',
+        actions: ['Contrôler IPS, antivirus, filtrage Web, contrôle applicatif et inspection SSL selon le flux.'],
+        reference: FORTINET_FIREWALL_POLICY_REFERENCE,
+      },
+    }
+  }
+  // securityProfiles est renseigné uniquement par l'import CLI : un export CSV ne permet pas de conclure.
+  if (!policy.securityProfiles) return null
+  if (!policy.securityProfiles.length) {
+    return {
+      ...base,
+      severity: 'medium',
+      title: 'Aucun profil de sécurité',
+      detail: 'Cette policy autorise le trafic sans profil antivirus, IPS, filtrage Web, contrôle applicatif ni filtrage DNS.',
+      evidence: ['Aucun profil de sécurité ni profile-group', `utm-status: ${policy.utmStatus}`],
+      recommendation: {
+        summary: 'Associer au minimum un profil IPS et, selon le flux, antivirus et filtrage Web.',
+        actions: [
+          'Identifier la nature du flux (sortant Internet, entrant, inter-zones internes).',
+          'Appliquer les profils adaptés ou documenter l’exception si le flux est interne et maîtrisé.',
+        ],
+        cli: `config firewall policy\n    edit ${policy.id}\n        set utm-status enable\n        set ips-sensor "default"\n        set av-profile "default"\n        set ssl-ssh-profile "certificate-inspection"\n    next\nend`,
+        reference: FORTINET_FIREWALL_POLICY_REFERENCE,
+      },
+    }
+  }
+  const kinds = policy.securityProfileKinds ?? []
+  const missing = [
+    ['ips-sensor', 'IPS'],
+    ['av-profile', 'antivirus'],
+    ['webfilter-profile', 'filtrage Web'],
+  ].filter(([key]) => !kinds.includes(key)).map(([, label]) => label)
+  if (!missing.length) return null
+  return {
+    ...base,
+    severity: 'low',
+    title: 'Profils de sécurité incomplets',
+    detail: `Cette policy applique des profils de sécurité mais n’a pas de profil : ${missing.join(', ')}.`,
+    evidence: [`Profils présents : ${kinds.join(', ') || 'aucun'}`, ...missing.map((label) => `Manquant : ${label}`)],
     recommendation: {
-      summary: 'Vérifier les profils réellement associés à cette policy sur le FortiGate.',
-      actions: ['Contrôler IPS, antivirus, filtrage Web, contrôle applicatif et inspection SSL selon le flux.'],
+      summary: 'Vérifier que l’absence de ces profils est voulue pour ce flux.',
+      actions: ['Compléter les profils manquants ou documenter l’exception dans le commentaire de la policy.'],
       reference: FORTINET_FIREWALL_POLICY_REFERENCE,
     },
   }
@@ -809,15 +882,29 @@ const objectFindings = (configuration: string, policies: FirewallPolicy[]): Find
     ['vip', 'firewall vip'],
     ['ip-pool', 'firewall ippool'],
   ] as const
-  const references = new Set(policies.filter((policy) => policy.status !== 'disable').flatMap((policy) => [
+  const groupMembers = new Map<string, string[]>()
+  for (const section of ['firewall addrgrp', 'firewall addrgrp6', 'firewall service group']) {
+    for (const [name, fields] of parseSection(configuration, section)) {
+      groupMembers.set(name.toLowerCase(), field(fields, 'member'))
+    }
+  }
+  const references = new Set<string>()
+  const pending = policies.filter((policy) => policy.status !== 'disable').flatMap((policy) => [
     ...policy.srcaddr,
     ...policy.dstaddr,
     ...policy.service,
     ...policy.internetServices,
     ...policy.destinationVips,
     ...policy.ipPools,
-  ].map((value) => value.toLowerCase())))
-  return definitions.flatMap(([kind, section]) => [...parseSection(configuration, section)].flatMap(([name, fields]) => {
+  ].map((value) => value.toLowerCase()))
+  // Un membre d'un groupe référencé est lui-même utilisé : on suit les groupes imbriqués.
+  while (pending.length) {
+    const name = pending.pop()!
+    if (references.has(name)) continue
+    references.add(name)
+    for (const member of groupMembers.get(name) ?? []) pending.push(member.toLowerCase())
+  }
+  const findings = definitions.flatMap(([kind, section]) => [...parseSection(configuration, section)].flatMap(([name, fields]) => {
     const empty = Object.values(fields).every((values) => !values.length)
     const unused = !references.has(name.toLowerCase())
     if (!empty && !unused) return []
@@ -837,8 +924,58 @@ const objectFindings = (configuration: string, policies: FirewallPolicy[]): Find
         actions: ['Vérifier les références indirectes et l’inventaire avant suppression.'],
         reference: FORTINET_FIREWALL_POLICY_REFERENCE,
       },
-    }]
+    } satisfies Finding]
   }))
+  return [...findings, ...duplicateObjectFindings(configuration)]
+}
+
+const duplicateObjectFindings = (configuration: string): Finding[] => {
+  const cosmeticKeys = new Set(['uuid', 'comment', 'color', 'visibility', 'fabric-object', 'tags'])
+  const sections = [
+    ['address', 'firewall address'],
+    ['address', 'firewall address6'],
+    ['address-group', 'firewall addrgrp'],
+    ['address-group', 'firewall addrgrp6'],
+    ['service', 'firewall service custom'],
+    ['service-group', 'firewall service group'],
+  ] as const
+  const findings: Finding[] = []
+  for (const [kind, section] of sections) {
+    const firstByDefinition = new Map<string, string>()
+    for (const [name, fields] of parseSection(configuration, section)) {
+      const significant = Object.entries(fields)
+        .filter(([key, values]) => !cosmeticKeys.has(key) && values.length)
+        .map(([key, values]) => [key, kind.endsWith('group') && key === 'member' ? [...values].sort() : values] as const)
+        .sort(([left], [right]) => left.localeCompare(right))
+      if (!significant.length) continue
+      const definition = JSON.stringify(significant).toLowerCase()
+      const original = firstByDefinition.get(definition)
+      if (!original) {
+        firstByDefinition.set(definition, name)
+        continue
+      }
+      findings.push({
+        id: `object-duplicate-${kind}-${name}`,
+        policyId: `object:${kind}:${name}`,
+        policyName: name,
+        order: 0,
+        severity: 'low',
+        category: 'object',
+        title: 'Objet en doublon',
+        detail: `L’objet ${kind} « ${name} » a la même définition que « ${original} ».`,
+        evidence: [`Type : ${kind}`, `Définition identique à : ${original}`],
+        recommendation: {
+          summary: 'Consolider les objets identiques pour limiter les erreurs de maintenance.',
+          actions: [
+            `Remplacer les références à « ${name} » par « ${original} » dans les policies et groupes.`,
+            'Supprimer le doublon une fois qu’il n’est plus référencé.',
+          ],
+          reference: FORTINET_FIREWALL_POLICY_REFERENCE,
+        },
+      })
+    }
+  }
+  return findings
 }
 
 export const analyzePolicies = (
@@ -851,6 +988,40 @@ export const analyzePolicies = (
 ): AuditResult => {
   const findings: Finding[] = []
   const activePolicies = policies.filter((policy) => policy.status !== 'disable')
+
+  // Les policies sont regroupées par interfaces : seuls les groupes dont les interfaces sont compatibles
+  // avec la policy étudiée sont parcourus, au lieu de comparer chaque paire de policies.
+  const buckets = new Map<string, Array<{ policy: FirewallPolicy, index: number }>>()
+  activePolicies.forEach((policy, index) => {
+    const key = `${policy.family ?? 'ipv4'}|${policy.srcintf.join(',')}|${policy.dstintf.join(',')}`
+    const bucket = buckets.get(key)
+    if (bucket) bucket.push({ policy, index })
+    else buckets.set(key, [{ policy, index }])
+  })
+  const findEarlier = (
+    policy: FirewallPolicy,
+    interfacesCompatible: (earlier: FirewallPolicy) => boolean,
+    matches: (earlier: FirewallPolicy) => boolean,
+  ): FirewallPolicy | undefined => {
+    let best: { policy: FirewallPolicy, index: number } | undefined
+    for (const bucket of buckets.values()) {
+      if (!interfacesCompatible(bucket[0].policy)) continue
+      for (const entry of bucket) {
+        if (best && entry.index > best.index) break
+        if (entry.policy.order < policy.order && matches(entry.policy)) {
+          best = entry
+          break
+        }
+      }
+    }
+    return best?.policy
+  }
+  const interfacesContain = (policy: FirewallPolicy) => (earlier: FirewallPolicy) =>
+    interfaceMatcher.contains(earlier.srcintf, policy.srcintf, ['any']) &&
+    interfaceMatcher.contains(earlier.dstintf, policy.dstintf, ['any'])
+  const interfacesIntersect = (policy: FirewallPolicy) => (earlier: FirewallPolicy) =>
+    interfaceMatcher.intersects(earlier.srcintf, policy.srcintf, ['any']) &&
+    interfaceMatcher.intersects(earlier.dstintf, policy.dstintf, ['any'])
 
   for (const policy of activePolicies) {
     const permissive = permissiveFinding(policy)
@@ -871,9 +1042,10 @@ export const analyzePolicies = (
     if (inspection) findings.push(inspection)
 
     if (policy.action !== 'accept') continue
-    const duplicatePolicy = activePolicies.find(
+    const duplicatePolicy = findEarlier(
+      policy,
+      interfacesContain(policy),
       (earlier) =>
-        earlier.order < policy.order &&
         earlier.action === policy.action &&
         policyContains(earlier, policy, addressMatcher, serviceMatcher, interfaceMatcher, scheduleMatcher, principalMatcher) &&
         policyContains(policy, earlier, addressMatcher, serviceMatcher, interfaceMatcher, scheduleMatcher, principalMatcher),
@@ -903,10 +1075,10 @@ export const analyzePolicies = (
         duplicateOf: duplicatePolicy.id,
       })
     } else {
-      const shadowingPolicy = activePolicies.find(
-        (earlier) =>
-          earlier.order < policy.order &&
-          policyContains(earlier, policy, addressMatcher, serviceMatcher, interfaceMatcher, scheduleMatcher, principalMatcher),
+      const shadowingPolicy = findEarlier(
+        policy,
+        interfacesContain(policy),
+        (earlier) => policyContains(earlier, policy, addressMatcher, serviceMatcher, interfaceMatcher, scheduleMatcher, principalMatcher),
       )
       if (shadowingPolicy) {
       findings.push({
@@ -939,10 +1111,10 @@ export const analyzePolicies = (
         shadowedBy: shadowingPolicy.id,
       })
       } else {
-      const overlappingPolicy = activePolicies.find(
-        (earlier) =>
-          earlier.order < policy.order &&
-          policiesIntersect(earlier, policy, addressMatcher, serviceMatcher, interfaceMatcher, scheduleMatcher, principalMatcher),
+      const overlappingPolicy = findEarlier(
+        policy,
+        interfacesIntersect(policy),
+        (earlier) => policiesIntersect(earlier, policy, addressMatcher, serviceMatcher, interfaceMatcher, scheduleMatcher, principalMatcher),
       )
       if (overlappingPolicy) {
         findings.push({
