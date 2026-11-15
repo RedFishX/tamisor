@@ -714,6 +714,10 @@ button.metric.active strong { text-decoration: underline; text-decoration-thickn
 .edition-banner strong { margin-right: 6px; }
 .edition-banner-link { color: var(--green); font-weight: 700; text-underline-offset: 3px; white-space: nowrap; transition: color var(--ease); }
 .edition-banner-link:hover { color: var(--ink); }
+.edition-banner-links { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+.edition-banner-account { color: var(--muted); }
+.edition-banner-action { padding: 0; border: 0; background: none; color: var(--green); font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; transition: color var(--ease); }
+.edition-banner-action:hover { color: var(--ink); }
 .locked-badge {
   margin-left: auto; padding: 1px 6px; border: 1px solid var(--green); border-radius: var(--radius-badge);
   color: var(--green); font-size: var(--text-11); font-style: normal; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
