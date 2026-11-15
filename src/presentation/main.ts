@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   BookOpen,
+  Braces,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -8,6 +9,7 @@ import {
   ChevronRight,
   Clipboard,
   Download,
+  FileCode,
   FileSearch,
   FileText,
   Filter,
@@ -55,6 +57,9 @@ import { renderMinutesMarkdown } from '../domain/meeting-minutes'
 import { createMeetingStore } from '../application/meeting-store'
 import { decisionKeys, renderMeetingBoard, renderMeetingFocus, type MeetingCardContext } from './meeting-view'
 import { renderMinutesHtml } from './meeting-minutes-report'
+import { buildJsonReport, buildSarifReport, type ReportContext } from '../application/ci-report'
+import { createConfigLocator } from '../infrastructure/config-locations'
+import packageJson from '../../package.json'
 import { usageBand, usageBandLabel, usageBands, type UsageBand } from '../domain/policy-usage'
 import { categoryFilterLabel, categoryLabel, findingCategories, severityLabel } from '../domain/labels'
 import { formatDate, formatNumber, getLocale, localeStorageKey, plural, tr, type Locale } from '../i18n'
@@ -322,7 +327,7 @@ const askConfirmation = (options: ConfirmationOptions): Promise<boolean> => new 
 })
 
 const renderIcons = () => createIcons({
-  icons: { AlertTriangle, BookOpen, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Download, FileSearch, FileText, Filter, GitCompareArrows, Info, Moon, PanelLeft, Plus, Presentation, Search, ShieldCheck, Square, SquareTerminal, Sun, TableProperties, Upload, X },
+  icons: { AlertTriangle, BookOpen, Braces, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Download, FileCode, FileSearch, FileText, Filter, GitCompareArrows, Info, Moon, PanelLeft, Plus, Presentation, Search, ShieldCheck, Square, SquareTerminal, Sun, TableProperties, Upload, X },
 })
 
 const renderThemeToggle = () => {
@@ -426,6 +431,8 @@ const renderSource = () => {
   document.querySelector<HTMLButtonElement>('#html-report-button')!.disabled = !sourceName
   document.querySelector<HTMLButtonElement>('#cli-export-button')!.disabled = !sourceName
   document.querySelector<HTMLButtonElement>('#ack-export-button')!.disabled = !sourceName
+  document.querySelector<HTMLButtonElement>('#sarif-export-button')!.disabled = !sourceName
+  document.querySelector<HTMLButtonElement>('#json-export-button')!.disabled = !sourceName
   document.querySelector<HTMLButtonElement>('#ack-import-button')!.disabled = !sourceName
   document.querySelector<HTMLButtonElement>('#minutes-export-button')!.disabled = !sourceName || !meetingBoard.cards.length
   if (!sourceName) {
@@ -1008,6 +1015,23 @@ document.querySelector<HTMLButtonElement>('#html-report-button')!.addEventListen
 })
 document.querySelector<HTMLButtonElement>('#cli-export-button')!.addEventListener('click', () => {
   downloadText(serializeRecommendationsCli(audit.findings), tr('remediations-fortigate.cli', 'fortigate-remediations.cli'), 'text/plain;charset=utf-8')
+  document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
+})
+/** Contexte des rapports SARIF / JSON : mêmes acquittements et numéros de ligne que la commande de CI. */
+const ciReportContext = (): ReportContext => ({
+  audit,
+  sourceUri: sourceName,
+  toolVersion: packageJson.version,
+  locate: lastImport ? createConfigLocator(lastImport.content, lastImport.name) : undefined,
+  acknowledgements: [...acknowledgementMetadata.values()],
+})
+const reportBaseName = () => sourceName.replace(/\.[^.]+$/, '') || 'fortiscope'
+document.querySelector<HTMLButtonElement>('#sarif-export-button')!.addEventListener('click', () => {
+  downloadText(JSON.stringify(buildSarifReport(ciReportContext()), null, 2), `${reportBaseName()}.sarif`, 'application/sarif+json;charset=utf-8')
+  document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
+})
+document.querySelector<HTMLButtonElement>('#json-export-button')!.addEventListener('click', () => {
+  downloadText(JSON.stringify(buildJsonReport(ciReportContext()), null, 2), `${reportBaseName()}.fortiscope.json`, 'application/json;charset=utf-8')
   document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
 })
 document.querySelector<HTMLButtonElement>('#ack-export-button')!.addEventListener('click', () => {

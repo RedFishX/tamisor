@@ -1,0 +1,50 @@
+# Audit FortiScope à chaque pull request, avec affichage des constats dans GitHub code scanning.
+# À placer dans .github/workflows/ du dépôt des configurations, avec tools/fortiscope.mjs
+# (construit par `npm run build:cli` dans le dépôt FortiScope).
+
+name: FortiScope
+
+on:
+  pull_request:
+    paths: ["firewalls/**"]
+  push:
+    branches: [main]
+    paths: ["firewalls/**"]
+
+permissions:
+  contents: read
+  security-events: write   # envoi du SARIF vers code scanning
+
+env:
+  FORTISCOPE_CONFIG: firewalls/fw-siege.conf
+  FORTISCOPE_FAIL_ON: high
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Référence (branche cible)
+        if: github.event_name == 'pull_request'
+        run: |
+          if git show "origin/${{ github.base_ref }}:$FORTISCOPE_CONFIG" > /tmp/target.conf 2>/dev/null; then
+            node tools/fortiscope.mjs /tmp/target.conf --source-uri "$FORTISCOPE_CONFIG" --json baseline.json --fail-on none > /dev/null
+          fi
+      - name: Audit
+        run: |
+          ARGS=""
+          [ -f baseline.json ] && ARGS="$ARGS --baseline baseline.json"
+          [ -f acquittements-fortiscope.json ] && ARGS="$ARGS --acknowledgements acquittements-fortiscope.json"
+          node tools/fortiscope.mjs "$FORTISCOPE_CONFIG" --sarif fortiscope.sarif --json fortiscope.json \
+            --fail-on "${{ github.event_name == 'pull_request' && env.FORTISCOPE_FAIL_ON || 'none' }}" $ARGS
+      - name: Envoi vers code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: fortiscope.sarif
+          category: fortiscope

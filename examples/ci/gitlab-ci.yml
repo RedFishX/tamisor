@@ -1,0 +1,48 @@
+# Audit FortiScope à chaque merge request (GitLab CI).
+#
+# Prérequis dans le dépôt des configurations :
+#   - tools/fortiscope.mjs : la commande construite par `npm run build:cli` dans le dépôt FortiScope
+#     (un seul fichier, sans dépendance ; Node 20 ou plus suffit) ;
+#   - optionnel : acquittements-fortiscope.json, exporté depuis l'application (menu Exporter).
+#
+# La référence est recalculée à partir de la branche cible : seuls les constats introduits
+# par la merge request font échouer le job.
+
+variables:
+  FORTISCOPE_CONFIG: "firewalls/fw-siege.conf"
+  FORTISCOPE_FAIL_ON: "high"   # critical | high | medium | low | none
+
+fortiscope:
+  stage: test
+  image: node:22-alpine
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - firewalls/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      variables:
+        FORTISCOPE_FAIL_ON: "none"   # branche principale : rapports seulement, sans bloquer
+  before_script:
+    - apk add --no-cache git
+  script:
+    - |
+      BASELINE_ARGS=""
+      if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
+        git fetch --depth=1 origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+        if git show "FETCH_HEAD:$FORTISCOPE_CONFIG" > /tmp/target.conf 2>/dev/null; then
+          node tools/fortiscope.mjs /tmp/target.conf --source-uri "$FORTISCOPE_CONFIG" --json baseline.json --fail-on none > /dev/null
+          BASELINE_ARGS="--baseline baseline.json"
+        fi
+      fi
+      ACK_ARGS=""
+      [ -f acquittements-fortiscope.json ] && ACK_ARGS="--acknowledgements acquittements-fortiscope.json"
+      node tools/fortiscope.mjs "$FORTISCOPE_CONFIG" \
+        --sarif fortiscope.sarif --json fortiscope.json \
+        --fail-on "$FORTISCOPE_FAIL_ON" $BASELINE_ARGS $ACK_ARGS
+  artifacts:
+    when: always
+    expose_as: "Audit FortiScope"
+    paths:
+      - fortiscope.json
+      - fortiscope.sarif
+    expire_in: 30 days

@@ -17,6 +17,12 @@ export const renderExportMenu = (auditReady: boolean): string => {
         <button id="cli-export-button" type="button"${disabled}>
           <i data-lucide="square-terminal"></i><span><strong>${tr('Commandes CLI', 'CLI commands')}</strong><small>${tr('Remédiations à adapter', 'Remediations to adapt')}</small></span>
         </button>
+        <button id="sarif-export-button" type="button"${disabled}>
+          <i data-lucide="file-code"></i><span><strong>${tr('Rapport SARIF', 'SARIF report')}</strong><small>${tr('Code scanning et outils de CI', 'Code scanning and CI tools')}</small></span>
+        </button>
+        <button id="json-export-button" type="button"${disabled}>
+          <i data-lucide="braces"></i><span><strong>${tr('Rapport JSON', 'JSON report')}</strong><small>${tr('Constats structurés, réutilisables', 'Structured, reusable findings')}</small></span>
+        </button>
         <button id="ack-export-button" type="button"${disabled}>
           <i data-lucide="download"></i><span><strong>${tr('Acquittements JSON', 'Acknowledgements JSON')}</strong><small>${tr('Partager l’état de revue', 'Share the review state')}</small></span>
         </button>

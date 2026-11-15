@@ -68,6 +68,33 @@ Après chaque import, la note globale et les compteurs (jamais le contenu de la 
 
 L’analyse reste volontairement conservatrice pour les objets dynamiques et les fonctions NAT qui ne peuvent pas être résolues depuis la seule table de politiques.
 
+## Intégration continue (SARIF / JSON)
+
+FortiScope peut auditer une configuration versionnée à chaque merge request. La commande `fortiscope` produit un rapport **SARIF 2.1.0** (affiché par GitHub code scanning, et lu par Azure DevOps, SonarQube ou DefectDojo) et un rapport **JSON** propre à FortiScope, puis fait échouer le job si des constats dépassent un seuil. Les deux formats sont aussi disponibles dans l'application, menu Exporter.
+
+```bash
+npm run build:cli            # produit dist-cli/fortiscope.mjs : un seul fichier, Node 20 ou plus, sans dépendance
+node dist-cli/fortiscope.mjs firewalls/fw-siege.conf \
+  --sarif fortiscope.sarif --json fortiscope.json \
+  --fail-on high \
+  --acknowledgements acquittements-fortiscope.json \
+  --baseline baseline.json
+```
+
+| Option | Rôle |
+| --- | --- |
+| `--fail-on` | Sévérité à partir de laquelle un constat ouvert fait échouer le job : `critical`, `high` (défaut), `medium`, `low` ou `none`. |
+| `--acknowledgements` | Acquittements exportés depuis l'application : ces constats ne bloquent pas et apparaissent comme *suppressions* dans le SARIF. Un acquittement dont la date de révision est passée ne protège plus. |
+| `--baseline` | Rapport JSON de la branche cible : seuls les constats nouveaux bloquent (état `new` / `unchanged` dans le SARIF). Fichier absent : analyse sans référence. |
+| `--source-uri` | Chemin du fichier dans le dépôt, repris dans les rapports. |
+| `--lang` | Langue des constats, `fr` (défaut) ou `en`. |
+
+Codes de sortie : `0` seuil respecté, `1` constats bloquants, `2` erreur d'utilisation ou d'import. Le résumé affiché dans le journal liste les constats bloquants avec `fichier:ligne`.
+
+Chaque constat d'un export CLI pointe la ligne `edit` de la policy ou de l'objet concerné (VDOM et IPv6 compris) ; un export CSV pointe le fichier sans ligne. L'identifiant du constat sert d'empreinte SARIF : un même constat est suivi d'une analyse à l'autre.
+
+Deux exemples prêts à adapter sont fournis dans `examples/ci/` : `gitlab-ci.yml` et `github-code-scanning.yml`. Ils recalculent la référence à partir du fichier de la branche cible (`git show`), si bien qu'une merge request n'échoue que sur les constats qu'elle introduit, et ne bloquent pas la branche principale (rapports seulement). GitLab n'affiche pas le SARIF dans la merge request : les rapports y sont publiés comme artefacts.
+
 ## Langue
 
 L'interface existe en français et en anglais. Les constats, les recommandations, les correspondances de conformité, les exports et le compte rendu de réunion sont aussi traduits. Au premier lancement, la langue suit celle du navigateur ; le bouton `EN` / `FR` de la barre supérieure la change et la mémorise.
