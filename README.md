@@ -69,7 +69,7 @@ Le tableau est enregistré dans le `localStorage` du navigateur, par nom de fich
 
 ## Conformité et historique
 
-Chaque constat affiche les exigences de référentiels concernées (PCI-DSS v4.0, CIS FortiGate, ANSSI), dans le détail, l'export CSV, le rapport HTML et la documentation Markdown. La correspondance est indicative.
+Chaque constat affiche les exigences de référentiels concernées (PCI-DSS v4.0, ANSSI), dans le détail, l'export CSV, le rapport HTML et la documentation Markdown. La correspondance est indicative.
 
 Après chaque import, la note globale et les compteurs (jamais le contenu de la configuration) sont enregistrés dans IndexedDB, dans le navigateur. Le panneau « Historique des audits » montre l'évolution par nom de fichier.
 

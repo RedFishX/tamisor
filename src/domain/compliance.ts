@@ -1,7 +1,7 @@
 import type { Finding } from './audit'
 import { tr } from '../i18n'
 
-export type ComplianceFramework = 'PCI-DSS v4.0' | 'CIS FortiGate' | 'ANSSI'
+export type ComplianceFramework = 'PCI-DSS v4.0' | 'ANSSI'
 
 export interface ComplianceReference {
   framework: ComplianceFramework
@@ -10,7 +10,6 @@ export interface ComplianceReference {
 }
 
 const pci = (control: string, title: string): ComplianceReference => ({ framework: 'PCI-DSS v4.0', control, title })
-const cis = (title: string): ComplianceReference => ({ framework: 'CIS FortiGate', control: 'Policy and Objects', title })
 const anssi = (title: string): ComplianceReference => ({
   framework: 'ANSSI',
   control: tr('Guide de filtrage réseau d’un pare-feu', 'Firewall network filtering guide'),
@@ -25,7 +24,6 @@ const anssi = (title: string): ComplianceReference => ({
 const referencesByCategory = (): Record<Finding['category'], ComplianceReference[]> => {
   const leastPrivilege = [
     pci('1.2.5', tr('Services, protocoles et ports autorisés identifiés, approuvés et justifiés', 'All services, protocols and ports allowed are identified, approved and have a defined business need')),
-    cis(tr('Restreindre sources, destinations et services de chaque policy', 'Restrict the sources, destinations and services of every policy')),
     anssi(tr('Autoriser explicitement le strict nécessaire, tout le reste est interdit', 'Explicitly allow only what is strictly necessary; everything else is denied')),
   ]
   const periodicReview = [
@@ -52,21 +50,14 @@ const referencesByCategory = (): Record<Finding['category'], ComplianceReference
     ],
     governance: [
       changeControl,
-      cis(tr('Documenter chaque policy (nom, commentaire, responsable)', 'Document every policy (name, comment, owner)')),
+      anssi(tr('Documenter chaque règle : objet, demandeur et responsable', 'Document every rule: purpose, requester and owner')),
     ],
     visibility: [
       pci('10.2.1', tr('Journaux d’audit activés et actifs pour tous les composants du système', 'Audit logs are enabled and active for all system components')),
-      cis(tr('Activer la journalisation des policies', 'Enable policy logging')),
       anssi(tr('Journaliser les flux autorisés pour permettre l’analyse a posteriori', 'Log allowed flows so they can be analysed afterwards')),
     ],
-    security: [
-      intrusionDetection,
-      cis(tr('Appliquer des profils de sécurité aux flux autorisés', 'Apply security profiles to allowed flows')),
-    ],
-    inspection: [
-      intrusionDetection,
-      cis(tr('Inspecter le trafic chiffré lorsque le contexte le permet', 'Inspect encrypted traffic where the context allows')),
-    ],
+    security: [intrusionDetection],
+    inspection: [intrusionDetection],
   }
 }
 

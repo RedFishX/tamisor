@@ -41,4 +41,11 @@ end`)
     expect(renderHtmlReport(audit, 'test.conf')).toContain('Référentiels concernés')
     expect(generatePolicyMarkdown(audit.policies[0], audit.findings, 'test.conf')).toContain('PCI-DSS v4.0 10.2.1')
   })
+
+  it('ne cite que des référentiels librement citables (pas le CIS Benchmark, sous licence)', () => {
+    const categories: Finding['category'][] = ['permissive', 'exposure', 'shadowed', 'overlap', 'duplicate', 'unused', 'object', 'indeterminate', 'temporary', 'governance', 'visibility', 'security', 'inspection']
+    const frameworks = new Set(categories.flatMap((category) => complianceReferences({ category }).map((reference) => reference.framework)))
+    expect([...frameworks].sort()).toEqual(['ANSSI', 'PCI-DSS v4.0'])
+    for (const category of categories) expect(complianceReferences({ category }).length).toBeGreaterThan(0)
+  })
 })
