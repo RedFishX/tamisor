@@ -18,8 +18,10 @@ jobs:
         include:
           - target: web
             image: tamisor
+            description: "Tamisor, application web d'audit des politiques de pare-feu FortiGate (analyse dans le navigateur)."
           - target: cli
             image: tamisor-cli
+            description: "Commande tamisor pour la CI : audit d'une configuration FortiGate, rapports SARIF et JSON."
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -31,12 +33,19 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
         uses: docker/metadata-action@v5
+        env:
+          # GitHub lit la description d'une image multi-architecture sur l'index du manifeste.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
+          labels: |
+            org.opencontainers.image.description=${{ matrix.description }}
+          annotations: |
+            org.opencontainers.image.description=${{ matrix.description }}
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -45,3 +54,4 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
