@@ -23,7 +23,7 @@
   size-adjust: 92%;
 }
 
-/* Charte Shadowline : une couleur d'accent (green), des neutres teintés de vert, trois couleurs de signal. */
+/* Charte Tamisor : une couleur d'accent (green), des neutres teintés de vert, trois couleurs de signal. */
 :root {
   --ink: #17201d;
   --muted: #5c6662;      /* ≥ 4,5:1 (WCAG AA) sur tous les fonds clairs, y compris --count et les fonds de sévérité. */

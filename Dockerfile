@@ -11,9 +11,9 @@ RUN npm test && npm run build
 # ---- Commande CI : docker run --rm -v "$PWD:/work" <image-cli> firewall.conf --sarif out.sarif ----
 FROM node:22-alpine AS cli
 WORKDIR /work
-COPY --from=build /app/dist-cli/shadowline.mjs /usr/local/lib/shadowline.mjs
+COPY --from=build /app/dist-cli/tamisor.mjs /usr/local/lib/tamisor.mjs
 USER node
-ENTRYPOINT ["node", "/usr/local/lib/shadowline.mjs"]
+ENTRYPOINT ["node", "/usr/local/lib/tamisor.mjs"]
 
 # ---- Application web : fichiers statiques servis par nginx, sans root (image par défaut) ----
 FROM nginxinc/nginx-unprivileged:1.27-alpine AS web

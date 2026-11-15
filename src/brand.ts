@@ -4,13 +4,13 @@
  *
  * Module sans dépendance, sans appel à `tr()` : il est chargé par le worker d'analyse et par la commande CI.
  */
-export const APP_NAME = 'Shadowline'
-export const APP_SLUG = 'shadowline'
-export const SOURCE_URL = 'https://github.com/RedFishX/shadowline'
+export const APP_NAME = 'Tamisor'
+export const APP_SLUG = 'tamisor'
+export const SOURCE_URL = 'https://github.com/RedFishX/tamisor'
 
 /** Préfixe des clés `localStorage` / `sessionStorage`. `public/boot.js` le reprend (script classique, sans import). */
 export const STORAGE_PREFIX = `${APP_SLUG}-`
-/** Préfixe utilisé avant le changement de nom : les clés sont recopiées au démarrage par `public/boot.js`. */
-export const LEGACY_STORAGE_PREFIX = 'fortiscope-'
+/** Préfixes des noms précédents : les clés sont recopiées au démarrage par `public/boot.js`. */
+export const LEGACY_STORAGE_PREFIXES = ['fortiscope-', 'shadowline-'] as const
 
 export const storageKey = (name: string): string => `${STORAGE_PREFIX}${name}`

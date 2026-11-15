@@ -15,7 +15,7 @@ permissions:
 jobs:
   cla:
     runs-on: ubuntu-latest
-    if: github.repository == 'RedFishX/shadowline' && ((github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target')
+    if: github.repository == 'RedFishX/tamisor' && ((github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target')
     steps:
       - uses: contributor-assistant/github-action@v2.6.1
         env:

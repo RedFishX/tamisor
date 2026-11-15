@@ -8,9 +8,9 @@ import { getLocale, tr } from '../i18n'
 import { APP_NAME, APP_SLUG, SOURCE_URL } from '../brand'
 
 /**
- * Rapports pour l'intégration continue : JSON (format propre à Shadowline, stable et versionné) et SARIF 2.1.0
+ * Rapports pour l'intégration continue : JSON (format propre à Tamisor, stable et versionné) et SARIF 2.1.0
  * (lu par GitHub code scanning, Azure DevOps, SonarQube, DefectDojo…). Fonctions pures, partagées par
- * l'export du navigateur et la commande `shadowline` exécutée en CI.
+ * l'export du navigateur et la commande `tamisor` exécutée en CI.
  */
 
 export const severityOrder: Severity[] = ['critical', 'high', 'medium', 'low']

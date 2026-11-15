@@ -1,13 +1,13 @@
 {
-  "name": "shadowline",
+  "name": "tamisor",
   "private": true,
   "version": "0.1.0",
   "license": "AGPL-3.0-or-later",
   "description": "Audit des politiques de pare-feu FortiGate dans le navigateur : règles permissives, masquées, sans journalisation.",
-  "repository": "github:RedFishX/shadowline",
+  "repository": "github:RedFishX/tamisor",
   "type": "module",
   "bin": {
-    "shadowline": "dist-cli/shadowline.mjs"
+    "tamisor": "dist-cli/tamisor.mjs"
   },
   "scripts": {
     "dev": "vite",

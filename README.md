@@ -1,4 +1,4 @@
-# Shadowline
+# Tamisor
 
 Application locale d’aide à l’audit des politiques FortiGate. Elle signale les règles très permissives, les règles entièrement masquées par une règle précédente et les règles sans journalisation.
 
@@ -17,11 +17,11 @@ L'image ne contient que des fichiers statiques servis par nginx (utilisateur non
 lecture seule, en-têtes CSP stricts avec `connect-src 'self'`). L'analyse s'exécute dans le navigateur : aucune
 configuration n'est envoyée au conteneur, qui refuse d'ailleurs tout corps de requête.
 
-Images publiées à chaque version (`v*`) : `ghcr.io/redfishx/shadowline` (application) et
-`ghcr.io/redfishx/shadowline-cli` (commande CI) :
+Images publiées à chaque version (`v*`) : `ghcr.io/redfishx/tamisor` (application) et
+`ghcr.io/redfishx/tamisor-cli` (commande CI) :
 
 ```bash
-docker run --rm -v "$PWD:/work" ghcr.io/redfishx/shadowline-cli firewalls/fw-siege.conf --sarif shadowline.sarif
+docker run --rm -v "$PWD:/work" ghcr.io/redfishx/tamisor-cli firewalls/fw-siege.conf --sarif tamisor.sarif
 ```
 
 ## Utilisation en développement
@@ -41,7 +41,7 @@ show full-configuration
 
 La configuration est analysée exclusivement dans le navigateur. Elle n’est envoyée à aucun serveur.
 
-Le bouton de thème dans l’en-tête bascule entre les affichages clair et sombre. La préférence est conservée localement; sans préférence enregistrée, Shadowline suit le thème du système.
+Le bouton de thème dans l’en-tête bascule entre les affichages clair et sombre. La préférence est conservée localement; sans préférence enregistrée, Tamisor suit le thème du système.
 
 Les exports CSV avec séparateur virgule ou point-virgule sont reconnus. Les en-têtes FortiGate usuels sont acceptés, notamment `Policy ID`, `Name`, `From`, `To`, `Source`, `Destination`, `Schedule`, `Service`, `Action`, `NAT`, `Security Profiles`, `Log Traffic` et `Status`. Les exports GUI utilisant une colonne combinée `Policy` au format `Nom (ID)` et des lignes de section sont également pris en charge.
 
@@ -51,7 +51,7 @@ Le profil de risque peut être réglé sur Standard ou Strict. Le détail d’un
 
 Le filtre « Hit count » range les policies par tranche d'utilisation (jamais, faible, moyenne, forte). Il n'est disponible qu'avec un export CSV qui contient la colonne `Hit Count`. Les constats peuvent être acquittés localement et restaurés avec l’option `Afficher les acquittés`. Une seconde configuration peut être sélectionnée avec `Comparer` pour compter les politiques ajoutées, modifiées et supprimées. Les exports CSV peuvent aussi fournir `Hit Count` et `Last Used`.
 
-Le menu `Exporter` regroupe les constats CSV, le rapport HTML interactif et les commandes CLI. Le rapport autonome reprend le langage visuel de Shadowline, permet de rechercher et filtrer les constats, de déplier leur détail et de lancer une impression propre. L’export CLI regroupe séparément les commandes de remédiation à examiner et adapter avant application.
+Le menu `Exporter` regroupe les constats CSV, le rapport HTML interactif et les commandes CLI. Le rapport autonome reprend le langage visuel de Tamisor, permet de rechercher et filtrer les constats, de déplier leur détail et de lancer une impression propre. L’export CLI regroupe séparément les commandes de remédiation à examiner et adapter avant application.
 
 Depuis le détail d’un constat, `Créer la documentation Markdown` ouvre une fiche dédiée à la policy sélectionnée, prête à être copiée. Elle explique son sens de circulation, ses critères, ses statistiques d’utilisation et l’ensemble de ses constats avec leurs recommandations. Aucun fichier n’est téléchargé.
 
@@ -90,14 +90,14 @@ L’analyse reste volontairement conservatrice pour les objets dynamiques et les
 
 ## Intégration continue (SARIF / JSON)
 
-Shadowline peut auditer une configuration versionnée à chaque merge request. La commande `shadowline` produit un rapport **SARIF 2.1.0** (affiché par GitHub code scanning, et lu par Azure DevOps, SonarQube ou DefectDojo) et un rapport **JSON** propre à Shadowline, puis fait échouer le job si des constats dépassent un seuil. Les deux formats sont aussi disponibles dans l'application, menu Exporter.
+Tamisor peut auditer une configuration versionnée à chaque merge request. La commande `tamisor` produit un rapport **SARIF 2.1.0** (affiché par GitHub code scanning, et lu par Azure DevOps, SonarQube ou DefectDojo) et un rapport **JSON** propre à Tamisor, puis fait échouer le job si des constats dépassent un seuil. Les deux formats sont aussi disponibles dans l'application, menu Exporter.
 
 ```bash
-npm run build:cli            # produit dist-cli/shadowline.mjs : un seul fichier, Node 20 ou plus, sans dépendance
-node dist-cli/shadowline.mjs firewalls/fw-siege.conf \
-  --sarif shadowline.sarif --json shadowline.json \
+npm run build:cli            # produit dist-cli/tamisor.mjs : un seul fichier, Node 20 ou plus, sans dépendance
+node dist-cli/tamisor.mjs firewalls/fw-siege.conf \
+  --sarif tamisor.sarif --json tamisor.json \
   --fail-on high \
-  --acknowledgements acquittements-shadowline.json \
+  --acknowledgements acquittements-tamisor.json \
   --baseline baseline.json
 ```
 
@@ -142,7 +142,7 @@ npm run build
 
 ## Licence
 
-Shadowline est un logiciel libre distribué sous [GNU AGPL-3.0-or-later](LICENSE). Si vous proposez une version
+Tamisor est un logiciel libre distribué sous [GNU AGPL-3.0-or-later](LICENSE). Si vous proposez une version
 modifiée à des utilisateurs via un réseau, vous devez leur donner accès à son code source. Les composants tiers
 et leurs licences sont listés dans [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Les contributions sont
 acceptées sous [CLA](CLA.md) (voir [CONTRIBUTING.md](CONTRIBUTING.md)).

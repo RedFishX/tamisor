@@ -1,8 +1,8 @@
-# Audit Shadowline à chaque pull request, avec affichage des constats dans GitHub code scanning.
-# À placer dans .github/workflows/ du dépôt des configurations, avec tools/shadowline.mjs
-# (construit par `npm run build:cli` dans le dépôt Shadowline).
+# Audit Tamisor à chaque pull request, avec affichage des constats dans GitHub code scanning.
+# À placer dans .github/workflows/ du dépôt des configurations, avec tools/tamisor.mjs
+# (construit par `npm run build:cli` dans le dépôt Tamisor).
 
-name: Shadowline
+name: Tamisor
 
 on:
   pull_request:
@@ -16,8 +16,8 @@ permissions:
   security-events: write   # envoi du SARIF vers code scanning
 
 env:
-  SHADOWLINE_CONFIG: firewalls/fw-siege.conf
-  SHADOWLINE_FAIL_ON: high
+  TAMISOR_CONFIG: firewalls/fw-siege.conf
+  TAMISOR_FAIL_ON: high
 
 jobs:
   audit:
@@ -32,19 +32,19 @@ jobs:
       - name: Référence (branche cible)
         if: github.event_name == 'pull_request'
         run: |
-          if git show "origin/${{ github.base_ref }}:$SHADOWLINE_CONFIG" > /tmp/target.conf 2>/dev/null; then
-            node tools/shadowline.mjs /tmp/target.conf --source-uri "$SHADOWLINE_CONFIG" --json baseline.json --fail-on none > /dev/null
+          if git show "origin/${{ github.base_ref }}:$TAMISOR_CONFIG" > /tmp/target.conf 2>/dev/null; then
+            node tools/tamisor.mjs /tmp/target.conf --source-uri "$TAMISOR_CONFIG" --json baseline.json --fail-on none > /dev/null
           fi
       - name: Audit
         run: |
           ARGS=""
           [ -f baseline.json ] && ARGS="$ARGS --baseline baseline.json"
-          [ -f acquittements-shadowline.json ] && ARGS="$ARGS --acknowledgements acquittements-shadowline.json"
-          node tools/shadowline.mjs "$SHADOWLINE_CONFIG" --sarif shadowline.sarif --json shadowline.json \
-            --fail-on "${{ github.event_name == 'pull_request' && env.SHADOWLINE_FAIL_ON || 'none' }}" $ARGS
+          [ -f acquittements-tamisor.json ] && ARGS="$ARGS --acknowledgements acquittements-tamisor.json"
+          node tools/tamisor.mjs "$TAMISOR_CONFIG" --sarif tamisor.sarif --json tamisor.json \
+            --fail-on "${{ github.event_name == 'pull_request' && env.TAMISOR_FAIL_ON || 'none' }}" $ARGS
       - name: Envoi vers code scanning
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: shadowline.sarif
-          category: shadowline
+          sarif_file: tamisor.sarif
+          category: tamisor

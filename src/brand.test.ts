@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { LEGACY_STORAGE_PREFIX, STORAGE_PREFIX } from './brand'
+import { LEGACY_STORAGE_PREFIXES, STORAGE_PREFIX } from './brand'
 import { localeStorageKey } from './i18n'
 
 const bootScript = readFileSync(new URL('../public/boot.js', import.meta.url), 'utf8')
@@ -26,7 +26,7 @@ const runBoot = (storage: ReturnType<typeof memoryStorage>, prefersDark = false)
 describe('identité et migration du stockage', () => {
   it('public/boot.js utilise les mêmes préfixes que src/brand.ts', () => {
     expect(bootScript).toContain(`var prefix = '${STORAGE_PREFIX}'`)
-    expect(bootScript).toContain(`var legacyPrefix = '${LEGACY_STORAGE_PREFIX}'`)
+    for (const legacy of LEGACY_STORAGE_PREFIXES) expect(bootScript).toContain(`'${legacy}'`)
     expect(localeStorageKey).toBe(`${STORAGE_PREFIX}locale`)
   })
 
@@ -36,13 +36,16 @@ describe('identité et migration du stockage', () => {
       'fortiscope-acknowledged': '["a"]',
       'fortiscope-meeting:fw.conf': '{}',
       'shadowline-acknowledged': '["b"]',
+      'shadowline-locale': 'en',
+      'tamisor-locale': 'fr',
       'autre-cle': 'x',
     })
     expect(runBoot(storage).theme).toBe('dark')
     expect(Object.fromEntries(storage.values)).toEqual({
-      'shadowline-theme': 'dark',
-      'shadowline-acknowledged': '["b"]',
-      'shadowline-meeting:fw.conf': '{}',
+      'tamisor-theme': 'dark',
+      'tamisor-acknowledged': '["b"]',
+      'tamisor-meeting:fw.conf': '{}',
+      'tamisor-locale': 'fr',
       'autre-cle': 'x',
     })
   })

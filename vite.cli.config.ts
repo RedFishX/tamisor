@@ -1,20 +1,20 @@
 import { defineConfig } from 'vite'
 
 /**
- * Construit la commande `shadowline` pour la CI : un seul fichier Node autonome (dépendances incluses),
+ * Construit la commande `tamisor` pour la CI : un seul fichier Node autonome (dépendances incluses),
  * qu'on peut copier dans le dépôt des configurations ou publier comme artefact de release.
  */
 export default defineConfig({
   publicDir: false,
   build: {
-    ssr: 'src/cli/shadowline.ts',
+    ssr: 'src/cli/tamisor.ts',
     outDir: 'dist-cli',
     emptyOutDir: true,
     target: 'node20',
     minify: false,
     rollupOptions: {
       output: {
-        entryFileNames: 'shadowline.mjs',
+        entryFileNames: 'tamisor.mjs',
         banner: '#!/usr/bin/env node',
       },
     },

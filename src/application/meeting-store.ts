@@ -7,7 +7,7 @@ export interface KeyValueStorage {
   removeItem(key: string): void
 }
 
-export const meetingStorageKey = (sourceName: string): string => `shadowline-meeting:${sourceName}`
+export const meetingStorageKey = (sourceName: string): string => `tamisor-meeting:${sourceName}`
 
 const isString = (value: unknown): value is string => typeof value === 'string'
 const optionalString = (value: unknown): boolean => value === undefined || isString(value)

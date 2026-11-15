@@ -1,4 +1,4 @@
-# Contribuer à Shadowline
+# Contribuer à Tamisor
 
 Merci de votre intérêt. Les signalements de faux positifs ou faux négatifs sont particulièrement utiles :
 joignez un extrait de configuration **anonymisé** (adresses, noms, mots de passe, clés et certificats retirés).
@@ -20,7 +20,7 @@ npm run build   # typecheck strict + application + commande CI
 
 ## Accord de contribution (CLA)
 
-Shadowline est publié sous AGPL-3.0 et pourra aussi être proposé sous une licence commerciale. Pour que cela
+Tamisor est publié sous AGPL-3.0 et pourra aussi être proposé sous une licence commerciale. Pour que cela
 reste possible, chaque contributeur accepte le [CLA](CLA.md) une seule fois, au moment de sa première pull
 request (un commentaire automatique explique comment faire). Vous conservez le droit d'auteur sur vos
 contributions.

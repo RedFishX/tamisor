@@ -1,6 +1,6 @@
 # Composants tiers
 
-Shadowline est distribué sous licence AGPL-3.0-or-later (voir `LICENSE`). Il intègre les composants suivants,
+Tamisor est distribué sous licence AGPL-3.0-or-later (voir `LICENSE`). Il intègre les composants suivants,
 sous des licences compatibles :
 
 | Composant | Version | Licence | Usage |
@@ -14,6 +14,6 @@ Les textes complets des licences sont fournis dans chaque paquet (`node_modules/
 
 ## Marques
 
-FortiGate, FortiOS, FortiManager et Fortinet sont des marques de Fortinet, Inc. Shadowline est un outil
+FortiGate, FortiOS, FortiManager et Fortinet sont des marques de Fortinet, Inc. Tamisor est un outil
 indépendant, non affilié à Fortinet, Inc., ni approuvé ou soutenu par elle. Ces noms ne sont utilisés que pour
 indiquer avec quels équipements l'outil est compatible.

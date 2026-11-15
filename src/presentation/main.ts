@@ -135,7 +135,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     </button>
     <a class="brand" href="#" aria-label="${tr(`${APP_NAME} - accueil`, `${APP_NAME} - home`)}">
       <span class="brand-mark" aria-hidden="true"><i data-lucide="shield-check"></i></span>
-      <span>Shadow<span>line</span></span>
+      <span>Tamis<span>or</span></span>
     </a>
     <div class="topbar-actions">
       <button class="secondary-button" id="compare-button" type="button" disabled${lockedAttributes('compare-button')}>

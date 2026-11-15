@@ -1,11 +1,11 @@
 # Démarrage : docker compose up -d   puis http://localhost:8080  (port modifiable : PORT=9000 docker compose up -d)
 services:
-  shadowline:
+  tamisor:
     build:
       context: .
       target: web
-    image: ghcr.io/redfishx/shadowline:latest
-    container_name: shadowline
+    image: ghcr.io/redfishx/tamisor:latest
+    container_name: tamisor
     ports:
       - "${PORT:-8080}:8080"
     restart: unless-stopped

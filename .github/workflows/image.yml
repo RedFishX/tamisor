@@ -12,14 +12,14 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     # Uniquement dans le dépôt public (ce fichier existe aussi dans le dépôt privé, d'où il est publié).
-    if: github.repository == 'RedFishX/shadowline'
+    if: github.repository == 'RedFishX/tamisor'
     strategy:
       matrix:
         include:
           - target: web
-            image: shadowline
+            image: tamisor
           - target: cli
-            image: shadowline-cli
+            image: tamisor-cli
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3

@@ -1,8 +1,8 @@
-# Accord de licence de contributeur (CLA) — Shadowline
+# Accord de licence de contributeur (CLA) — Tamisor
 
 *Version 1.0. Projet de texte à faire valider par un conseil juridique avant usage.*
 
-En soumettant une contribution (code, documentation, tests ou tout autre élément) au projet Shadowline,
+En soumettant une contribution (code, documentation, tests ou tout autre élément) au projet Tamisor,
 vous (« le Contributeur ») acceptez les conditions suivantes au bénéfice du mainteneur du projet
 (« le Mainteneur ») :
 

@@ -1,18 +1,18 @@
-# Audit Shadowline à chaque merge request (GitLab CI).
+# Audit Tamisor à chaque merge request (GitLab CI).
 #
 # Prérequis dans le dépôt des configurations :
-#   - tools/shadowline.mjs : la commande construite par `npm run build:cli` dans le dépôt Shadowline
+#   - tools/tamisor.mjs : la commande construite par `npm run build:cli` dans le dépôt Tamisor
 #     (un seul fichier, sans dépendance ; Node 20 ou plus suffit) ;
-#   - optionnel : acquittements-shadowline.json, exporté depuis l'application (menu Exporter).
+#   - optionnel : acquittements-tamisor.json, exporté depuis l'application (menu Exporter).
 #
 # La référence est recalculée à partir de la branche cible : seuls les constats introduits
 # par la merge request font échouer le job.
 
 variables:
-  SHADOWLINE_CONFIG: "firewalls/fw-siege.conf"
-  SHADOWLINE_FAIL_ON: "high"   # critical | high | medium | low | none
+  TAMISOR_CONFIG: "firewalls/fw-siege.conf"
+  TAMISOR_FAIL_ON: "high"   # critical | high | medium | low | none
 
-shadowline:
+tamisor:
   stage: test
   image: node:22-alpine
   rules:
@@ -21,7 +21,7 @@ shadowline:
         - firewalls/**/*
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       variables:
-        SHADOWLINE_FAIL_ON: "none"   # branche principale : rapports seulement, sans bloquer
+        TAMISOR_FAIL_ON: "none"   # branche principale : rapports seulement, sans bloquer
   before_script:
     - apk add --no-cache git
   script:
@@ -29,20 +29,20 @@ shadowline:
       BASELINE_ARGS=""
       if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
         git fetch --depth=1 origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-        if git show "FETCH_HEAD:$SHADOWLINE_CONFIG" > /tmp/target.conf 2>/dev/null; then
-          node tools/shadowline.mjs /tmp/target.conf --source-uri "$SHADOWLINE_CONFIG" --json baseline.json --fail-on none > /dev/null
+        if git show "FETCH_HEAD:$TAMISOR_CONFIG" > /tmp/target.conf 2>/dev/null; then
+          node tools/tamisor.mjs /tmp/target.conf --source-uri "$TAMISOR_CONFIG" --json baseline.json --fail-on none > /dev/null
           BASELINE_ARGS="--baseline baseline.json"
         fi
       fi
       ACK_ARGS=""
-      [ -f acquittements-shadowline.json ] && ACK_ARGS="--acknowledgements acquittements-shadowline.json"
-      node tools/shadowline.mjs "$SHADOWLINE_CONFIG" \
-        --sarif shadowline.sarif --json shadowline.json \
-        --fail-on "$SHADOWLINE_FAIL_ON" $BASELINE_ARGS $ACK_ARGS
+      [ -f acquittements-tamisor.json ] && ACK_ARGS="--acknowledgements acquittements-tamisor.json"
+      node tools/tamisor.mjs "$TAMISOR_CONFIG" \
+        --sarif tamisor.sarif --json tamisor.json \
+        --fail-on "$TAMISOR_FAIL_ON" $BASELINE_ARGS $ACK_ARGS
   artifacts:
     when: always
-    expose_as: "Audit Shadowline"
+    expose_as: "Audit Tamisor"
     paths:
-      - shadowline.json
-      - shadowline.sarif
+      - tamisor.json
+      - tamisor.sarif
     expire_in: 30 days
