@@ -1,7 +1,8 @@
 import type { Finding, FirewallPolicy } from '../domain/audit'
 import { complianceReferences, formatComplianceReference } from '../domain/compliance'
+import { tr } from '../i18n'
 
-const values = (items: string[]): string => items.join(', ') || 'Non défini'
+const values = (items: string[]): string => items.join(', ') || tr('Non défini', 'Not set')
 
 export const generatePolicyMarkdown = (
   policy: FirewallPolicy,
@@ -9,37 +10,41 @@ export const generatePolicyMarkdown = (
   sourceName: string,
 ): string => {
   const statistics = [
-    policy.hitCount !== undefined ? `| Correspondances | ${policy.hitCount} |` : '',
-    policy.lastUsed ? `| Dernière utilisation | ${policy.lastUsed} |` : '',
+    policy.hitCount !== undefined ? `| ${tr('Correspondances', 'Hits')} | ${policy.hitCount} |` : '',
+    policy.lastUsed ? `| ${tr('Dernière utilisation', 'Last used')} | ${policy.lastUsed} |` : '',
   ].filter(Boolean).join('\n')
   const findingsDocumentation = findings.length
-    ? findings.map((finding) => `### ${finding.title}\n\n${finding.detail}\n\n**Recommandation :** ${finding.recommendation.summary}\n\n${finding.recommendation.actions.map((action) => `- ${action}`).join('\n')}\n\n**Référentiels (indicatif) :**\n\n${complianceReferences(finding).map((reference) => `- ${formatComplianceReference(reference)}`).join('\n')}`).join('\n\n')
-    : 'Aucun constat détecté pour cette policy.'
+    ? findings.map((finding) => `### ${finding.title}\n\n${finding.detail}\n\n**${tr('Recommandation :', 'Recommendation:')}** ${finding.recommendation.summary}\n\n${finding.recommendation.actions.map((action) => `- ${action}`).join('\n')}\n\n**${tr('Référentiels (indicatif) :', 'Frameworks (indicative):')}**\n\n${complianceReferences(finding).map((reference) => `- ${formatComplianceReference(reference)}`).join('\n')}`).join('\n\n')
+    : tr('Aucun constat détecté pour cette policy.', 'No finding detected for this policy.')
 
+  const c = tr(' :', ':')
   return `# ${policy.name}
 
-**Source :** ${sourceName}  
-**Policy :** #${policy.id}  
-**VDOM :** ${policy.vdom ?? 'global'}  
-**Famille :** ${(policy.family ?? 'ipv4').toUpperCase()}
+**Source${c}** ${sourceName}  
+**Policy${c}** #${policy.id}  
+**VDOM${c}** ${policy.vdom ?? 'global'}  
+**${tr('Famille', 'Family')}${c}** ${(policy.family ?? 'ipv4').toUpperCase()}
 
-## Rôle de la policy
+## ${tr('Rôle de la policy', 'Policy purpose')}
 
-Du réseau **${values(policy.srcaddr)}** vers **${values(policy.dstaddr)}**, via **${values(policy.service)}**, pendant **${values(policy.schedule)}**. Action appliquée : **${policy.action}**.
+${tr(
+    `Du réseau **${values(policy.srcaddr)}** vers **${values(policy.dstaddr)}**, via **${values(policy.service)}**, pendant **${values(policy.schedule)}**. Action appliquée : **${policy.action}**.`,
+    `From **${values(policy.srcaddr)}** to **${values(policy.dstaddr)}**, using **${values(policy.service)}**, during **${values(policy.schedule)}**. Action applied: **${policy.action}**.`,
+  )}
 
-## Critères de correspondance
+## ${tr('Critères de correspondance', 'Match criteria')}
 
-| Critère | Valeur |
+| ${tr('Critère', 'Criterion')} | ${tr('Valeur', 'Value')} |
 | --- | --- |
 | Interfaces | ${values(policy.srcintf)} → ${values(policy.dstintf)} |
-| Adresses | ${values(policy.srcaddr)} → ${values(policy.dstaddr)} |
+| ${tr('Adresses', 'Addresses')} | ${values(policy.srcaddr)} → ${values(policy.dstaddr)} |
 | Services | ${values(policy.service)} |
-| Horaire | ${values(policy.schedule)} |
-| Journalisation | ${policy.logtraffic} |
-| Profils de sécurité | ${policy.utmStatus} |
+| ${tr('Horaire', 'Schedule')} | ${values(policy.schedule)} |
+| ${tr('Journalisation', 'Logging')} | ${policy.logtraffic} |
+| ${tr('Profils de sécurité', 'Security profiles')} | ${policy.utmStatus} |
 ${statistics}
-${policy.comments ? `\n## Contexte\n\n${policy.comments}\n` : ''}
-## Constats d’audit
+${policy.comments ? `\n## ${tr('Contexte', 'Context')}\n\n${policy.comments}\n` : ''}
+## ${tr('Constats d’audit', 'Audit findings')}
 
 ${findingsDocumentation}
 `

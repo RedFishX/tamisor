@@ -1,4 +1,5 @@
 import type { AuditResult, Finding, FirewallPolicy, Severity } from './audit'
+import { tr } from '../i18n'
 
 /** Colonnes du tableau de réunion : une colonne d'entrée et quatre issues possibles. */
 export type MeetingColumn = 'discuss' | 'delete' | 'modify' | 'keep' | 'postpone'
@@ -7,13 +8,13 @@ export type MeetingProposal = 'delete' | 'modify' | 'keep'
 export const meetingColumns: MeetingColumn[] = ['discuss', 'delete', 'modify', 'keep', 'postpone']
 export const decisionColumns: MeetingColumn[] = ['delete', 'modify', 'keep', 'postpone']
 
-export const meetingColumnLabels: Record<MeetingColumn, string> = {
-  discuss: 'À discuter',
-  delete: 'Supprimer',
-  modify: 'Modifier',
-  keep: 'Conserver',
-  postpone: 'Reporter',
-}
+export const meetingColumnLabel = (column: MeetingColumn): string => ({
+  discuss: tr('À discuter', 'To discuss'),
+  delete: tr('Supprimer', 'Delete'),
+  modify: tr('Modifier', 'Modify'),
+  keep: tr('Conserver', 'Keep'),
+  postpone: tr('Reporter', 'Postpone'),
+})[column]
 
 export interface MeetingCard {
   policyKey: string
@@ -54,7 +55,7 @@ const today = (): string => new Date().toISOString().slice(0, 10)
 export const createBoard = (sourceName: string, date = today()): MeetingBoard => ({
   version: 1,
   sourceName,
-  title: `Revue des règles · ${sourceName}`,
+  title: tr(`Revue des règles · ${sourceName}`, `Rule review · ${sourceName}`),
   date,
   participants: [],
   cards: [],

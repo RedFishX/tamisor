@@ -1,4 +1,5 @@
 import type { Finding } from '../domain/audit'
+import { tr } from '../i18n'
 
 export const acknowledgementKey = (sourceName: string, finding: Finding): string =>
   `${sourceName}:${finding.id}`
@@ -32,7 +33,7 @@ export const serializeAcknowledgements = (records: AcknowledgementRecord[]): str
 export const parseAcknowledgements = (content: string): AcknowledgementRecord[] => {
   const parsed: unknown = JSON.parse(content)
   if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { acknowledgements?: unknown }).acknowledgements)) {
-    throw new Error('Format d’acquittements invalide')
+    throw new Error(tr('Format d’acquittements invalide', 'Invalid acknowledgements format'))
   }
   return (parsed as { acknowledgements: unknown[] }).acknowledgements.filter((record): record is AcknowledgementRecord => {
     if (!record || typeof record !== 'object') return false

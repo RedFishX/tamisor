@@ -1,5 +1,6 @@
 import Papa from 'papaparse'
 import type { FirewallPolicy } from '../domain/audit'
+import { tr } from '../i18n'
 
 type CsvRow = Record<string, string>
 
@@ -64,13 +65,14 @@ const parseHitCount = (value: string): number | undefined => {
   return /^\d+$/.test(digits) ? Number(digits) : undefined
 }
 
+// Libellés évalués à l'usage : ce module tourne dans le worker, où la langue est fixée juste avant l'analyse.
 const REQUIRED_FIELDS = [
-  ['srcintf', 'interface entrante'],
-  ['dstintf', 'interface sortante'],
-  ['srcaddr', 'source'],
-  ['dstaddr', 'destination'],
-  ['service', 'service'],
-  ['action', 'action'],
+  ['srcintf', () => tr('interface entrante', 'incoming interface')],
+  ['dstintf', () => tr('interface sortante', 'outgoing interface')],
+  ['srcaddr', () => 'source'],
+  ['dstaddr', () => 'destination'],
+  ['service', () => 'service'],
+  ['action', () => 'action'],
 ] as const
 
 export const parseCsvPolicies = (content: string): { policies: FirewallPolicy[], errors: string[] } => {
@@ -81,13 +83,13 @@ export const parseCsvPolicies = (content: string): { policies: FirewallPolicy[],
   })
 
   const syntaxErrors = parsed.errors.filter((error) => ['Delimiter', 'Quotes'].includes(error.type))
-  if (syntaxErrors.length) return { policies: [], errors: [`CSV invalide : ${syntaxErrors[0].message}`] }
+  if (syntaxErrors.length) return { policies: [], errors: [tr(`CSV invalide : ${syntaxErrors[0].message}`, `Invalid CSV: ${syntaxErrors[0].message}`)] }
 
   const normalizedHeaders = (parsed.meta.fields ?? []).map(normalizeHeader)
   const missingFields = REQUIRED_FIELDS.filter(([field]) =>
     !HEADER_ALIASES[field].some((alias) => normalizedHeaders.includes(alias)),
-  ).map(([, label]) => label)
-  if (missingFields.length) return { policies: [], errors: [`Colonnes CSV obligatoires absentes : ${missingFields.join(', ')}.`] }
+  ).map(([, label]) => label())
+  if (missingFields.length) return { policies: [], errors: [tr(`Colonnes CSV obligatoires absentes : ${missingFields.join(', ')}.`, `Required CSV columns missing: ${missingFields.join(', ')}.`)] }
 
   const policies = parsed.data.map((row, index) => {
     const combinedPolicy = valueFor(row, 'policy')

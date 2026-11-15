@@ -1,4 +1,5 @@
 import type { AuditResult, Finding, Severity } from './audit'
+import { tr } from '../i18n'
 
 export type RiskProfile = 'standard' | 'strict'
 
@@ -15,18 +16,18 @@ const categoryBonus: Partial<Record<Finding['category'], number>> = {
   shadowed: 5,
 }
 
-const severityLabels: Record<Severity, string> = {
-  critical: 'Sévérité critique',
-  high: 'Sévérité élevée',
-  medium: 'Sévérité moyenne',
-  low: 'Sévérité faible',
-}
+const severityLabels = (): Record<Severity, string> => ({
+  critical: tr('Sévérité critique', 'Critical severity'),
+  high: tr('Sévérité élevée', 'High severity'),
+  medium: tr('Sévérité moyenne', 'Medium severity'),
+  low: tr('Sévérité faible', 'Low severity'),
+})
 
-const categoryReasons: Partial<Record<Finding['category'], string>> = {
-  exposure: 'Exposition d’une VIP',
-  permissive: 'Périmètre permissif',
-  shadowed: 'Règle masquée',
-}
+const categoryReasons = (): Partial<Record<Finding['category'], string>> => ({
+  exposure: tr('Exposition d’une VIP', 'VIP exposure'),
+  permissive: tr('Périmètre permissif', 'Permissive scope'),
+  shadowed: tr('Règle masquée', 'Shadowed rule'),
+})
 
 const configurationPenalties: Record<Severity, number> = {
   critical: 18,
@@ -60,9 +61,10 @@ export const explainRiskScore = (finding: Finding, profile: RiskProfile): RiskAs
   const findingCategoryBonus = categoryBonus[finding.category] ?? 0
   const strictBonus = profile === 'strict' ? 15 : 0
   const rawScore = severityBase + findingCategoryBonus + strictBonus
-  const reasons = [`${severityLabels[finding.severity]} : ${severityBase} points`]
-  if (findingCategoryBonus) reasons.push(`${categoryReasons[finding.category]} : +${findingCategoryBonus} points`)
-  if (strictBonus) reasons.push(`Profil strict : +${strictBonus} points`)
+  const separator = tr(' : ', ': ')
+  const reasons = [`${severityLabels()[finding.severity]}${separator}${severityBase} points`]
+  if (findingCategoryBonus) reasons.push(`${categoryReasons()[finding.category]}${separator}+${findingCategoryBonus} points`)
+  if (strictBonus) reasons.push(`${tr('Profil strict', 'Strict profile')}${separator}+${strictBonus} points`)
   return {
     score: Math.min(100, rawScore),
     severityBase,

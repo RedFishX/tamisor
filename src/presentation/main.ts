@@ -34,7 +34,7 @@ import type { ImportedAuditResult } from '../application/audit-service'
 import { applyMetricFilter, matchesFindingQuery, type MetricFilter } from '../application/finding-filters'
 import { computeTrend, entriesForSource, recordAudit, type HistoryEntry, type HistoryStore } from '../application/audit-history'
 import { categoryFamilies, prioritizeFindings, scoreWithoutCritical, summarizeFamilies, summarizeVdoms, type FindingFamily } from '../domain/overview'
-import { familyLabels, renderOverview } from './overview-view'
+import { familyLabel, renderOverview } from './overview-view'
 import { createIndexedDbHistoryStore } from '../infrastructure/indexeddb-history-store'
 import { renderHistory } from './history-view'
 import { renderCompliance, renderRecommendation, serializeFindingsCsv } from './recommendation-view'
@@ -47,7 +47,7 @@ import { createExecutiveSummary, renderHtmlReport, serializeRecommendationsCli }
 import { resolveTheme, toggleTheme, type ResolvedTheme, type ThemePreference } from './theme'
 import { generatePolicyMarkdown } from './policy-documentation'
 import {
-  addPolicies, agenda, cardsInColumn, createBoard, findingsForCard, hasCard, meetingColumns, moveCard,
+  addPolicies, agenda, cardsInColumn, createBoard, findingsForCard, hasCard, meetingColumnLabel, meetingColumns, moveCard,
   moveToDiscussGroup, policyForCard, policyKey, reconcileBoard, sortDiscussByPriority, syncBoard, updateCard,
   type MeetingBoard, type MeetingCard, type MeetingCardPatch, type MeetingColumn, type MeetingProposal,
 } from '../domain/meeting'
@@ -55,36 +55,19 @@ import { renderMinutesMarkdown } from '../domain/meeting-minutes'
 import { createMeetingStore } from '../application/meeting-store'
 import { decisionKeys, renderMeetingBoard, renderMeetingFocus, type MeetingCardContext } from './meeting-view'
 import { renderMinutesHtml } from './meeting-minutes-report'
-import { usageBand, usageBandLabels, usageBands, type UsageBand } from '../domain/policy-usage'
+import { usageBand, usageBandLabel, usageBands, type UsageBand } from '../domain/policy-usage'
+import { categoryFilterLabel, categoryLabel, findingCategories, severityLabel } from '../domain/labels'
+import { formatDate, formatNumber, getLocale, localeStorageKey, plural, tr, type Locale } from '../i18n'
 
-const severityLabels: Record<Severity, string> = {
-  critical: 'Critique',
-  high: 'Élevée',
-  medium: 'Moyenne',
-  low: 'Faible',
-}
+const elementRiskLabel = (level: ElementRiskLevel): string => ({
+  high: tr('Élevé', 'High'),
+  medium: tr('Moyen', 'Medium'),
+  low: tr('Faible', 'Low'),
+})[level]
 
-const categoryLabels: Record<Finding['category'], string> = {
-  duplicate: 'Doublon',
-  shadowed: 'Masquée',
-  overlap: 'Chevauchement',
-  permissive: 'Permissive',
-  exposure: 'Exposition',
-  unused: 'Règles inutilisées',
-  indeterminate: 'À valider',
-  temporary: 'Temporaire',
-  governance: 'Gouvernance',
-  security: 'Profils de sécurité',
-  inspection: 'Inspection SSL',
-  object: 'Objets',
-  visibility: 'Visibilité',
-}
-
-const elementRiskLabels: Record<ElementRiskLevel, string> = {
-  high: 'Élevé',
-  medium: 'Moyen',
-  low: 'Faible',
-}
+const otherLocale: Locale = getLocale() === 'fr' ? 'en' : 'fr'
+document.documentElement.lang = getLocale()
+document.title = tr('FortiScope · Audit de politiques FortiGate', 'FortiScope · FortiGate policy audit')
 
 let audit: AuditResult = emptyAudit()
 let sourceName = ''
@@ -134,35 +117,38 @@ const escapeHtml = (value: string) =>
   })[character] ?? character)
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
+  <a class="skip-link" href="#main-content">${tr('Aller au contenu', 'Skip to content')}</a>
   <header class="topbar">
-    <button class="icon-button sidebar-toggle" id="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="Afficher la source et l’historique" title="Source et historique">
+    <button class="icon-button sidebar-toggle" id="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="${tr('Afficher la source et l’historique', 'Show source and history')}" title="${tr('Source et historique', 'Source and history')}">
       <i data-lucide="panel-left"></i>
     </button>
-    <a class="brand" href="#" aria-label="FortiScope - accueil">
-      <span class="brand-mark"><i data-lucide="shield-check"></i></span>
+    <a class="brand" href="#" aria-label="${tr('FortiScope - accueil', 'FortiScope - home')}">
+      <span class="brand-mark" aria-hidden="true"><i data-lucide="shield-check"></i></span>
       <span>Forti<span>Scope</span></span>
     </a>
     <div class="topbar-actions">
       <button class="secondary-button" id="compare-button" type="button" disabled>
-        <i data-lucide="git-compare-arrows"></i> Comparer
+        <i data-lucide="git-compare-arrows"></i> ${tr('Comparer', 'Compare')}
       </button>
       ${renderExportMenu(false)}
-      <button class="icon-button theme-toggle" id="theme-toggle" type="button" aria-label="Activer le thème sombre" title="Activer le thème sombre"></button>
+      <button class="icon-button locale-toggle" id="locale-toggle" type="button" lang="${otherLocale}"
+        aria-label="${otherLocale === 'en' ? 'Switch to English' : 'Passer en français'}" title="${otherLocale === 'en' ? 'Switch to English' : 'Passer en français'}">${otherLocale.toUpperCase()}</button>
+      <button class="icon-button theme-toggle" id="theme-toggle" type="button"></button>
     </div>
     <input id="compare-input" type="file" accept=".conf,.txt,.csv,text/plain,text/csv" hidden />
     <input id="ack-import-input" type="file" accept=".json,application/json" hidden />
   </header>
 
-  <main class="workspace">
-    <aside class="sidebar" id="sidebar" aria-label="Source et historique">
+  <div class="workspace">
+    <aside class="sidebar" id="sidebar" aria-label="${tr('Source et historique', 'Source and history')}">
       <div>
-        <p class="eyebrow">Source de l’audit</p>
-        <label class="dropzone" id="dropzone" for="file-input" tabindex="0">
-          <span class="dropzone-icon"><i data-lucide="upload"></i></span>
-          <strong>Déposez votre export FortiGate</strong>
-          <small>ou cliquez pour choisir un fichier</small>
-          <span class="file-types">.conf · .txt · .csv · 10 Mo max.</span>
-        </label>
+        <h2 class="eyebrow" id="source-title">${tr('Source de l’audit', 'Audit source')}</h2>
+        <button class="dropzone" id="dropzone" type="button" data-choose-file aria-describedby="file-types">
+          <span class="dropzone-icon" aria-hidden="true"><i data-lucide="upload"></i></span>
+          <strong>${tr('Déposez votre export FortiGate', 'Drop your FortiGate export')}</strong>
+          <small>${tr('ou cliquez pour choisir un fichier', 'or click to choose a file')}</small>
+          <span class="file-types" id="file-types">.conf · .txt · .csv · ${tr('10 Mo max.', '10 MB max.')}</span>
+        </button>
         <input id="file-input" type="file" accept=".conf,.txt,.csv,text/plain,text/csv" hidden />
       </div>
 
@@ -170,120 +156,113 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
       <section class="history" aria-labelledby="history-title">
         <div class="history-heading">
-          <p class="eyebrow" id="history-title">Historique de ce fichier</p>
-          <button class="text-button" id="history-clear" type="button" hidden>Effacer</button>
+          <h2 class="eyebrow" id="history-title">${tr('Historique de ce fichier', 'History of this file')}</h2>
+          <button class="text-button" id="history-clear" type="button" hidden>${tr('Effacer', 'Clear')}</button>
         </div>
         <div id="history-content"></div>
       </section>
 
       <details class="limitations">
-        <summary>Limites de l’analyse</summary>
-        <p>Les objets dynamiques, les préfixes IPv6 imbriqués et le contenu des objets référencés uniquement par un CSV ne sont pas résolus. Les horaires nommés sont comparés par identité.</p>
+        <summary>${tr('Limites de l’analyse', 'Analysis limits')}</summary>
+        <p>${tr(
+          'Les objets dynamiques, les préfixes IPv6 imbriqués et le contenu des objets référencés uniquement par un CSV ne sont pas résolus. Les horaires nommés sont comparés par identité.',
+          'Dynamic objects, nested IPv6 prefixes and the content of objects referenced only by a CSV are not resolved. Named schedules are compared by name.',
+        )}</p>
       </details>
     </aside>
     <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
 
-    <section class="content">
+    <main class="content" id="main-content" tabindex="-1">
       <div class="page-heading">
         <div>
-          <p class="eyebrow">Revue de configuration</p>
-          <h1>Politiques à examiner</h1>
+          <p class="eyebrow">${tr('Revue de configuration', 'Configuration review')}</p>
+          <h1>${tr('Politiques à examiner', 'Policies to review')}</h1>
         </div>
-        <div class="configuration-score" id="configuration-score" aria-label="Note globale de la configuration"></div>
+        <div class="configuration-score" id="configuration-score"></div>
       </div>
 
-      <nav class="view-tabs" role="tablist" aria-label="Vues de l’audit">
-        <button type="button" role="tab" id="tab-overview" aria-controls="view-overview" data-view="overview">Vue d’ensemble</button>
-        <button type="button" role="tab" id="tab-findings" aria-controls="view-findings" data-view="findings">Constats <span id="tab-findings-count"></span></button>
-        <button type="button" role="tab" id="tab-meeting" aria-controls="view-meeting" data-view="meeting">Réunion <span id="tab-meeting-count"></span></button>
-      </nav>
+      <div class="view-tabs" role="tablist" aria-label="${tr('Vues de l’audit', 'Audit views')}">
+        <button type="button" role="tab" id="tab-overview" aria-controls="view-overview" data-view="overview">${tr('Vue d’ensemble', 'Overview')}</button>
+        <button type="button" role="tab" id="tab-findings" aria-controls="view-findings" data-view="findings">${tr('Constats', 'Findings')} <span id="tab-findings-count"></span></button>
+        <button type="button" role="tab" id="tab-meeting" aria-controls="view-meeting" data-view="meeting">${tr('Réunion', 'Meeting')} <span id="tab-meeting-count"></span></button>
+      </div>
 
       <div class="import-feedback" id="import-feedback" role="alert" hidden></div>
-      <div class="comparison-summary" id="comparison-summary" hidden></div>
+      <div class="comparison-summary" id="comparison-summary" role="status" hidden></div>
 
-      <div class="overview" id="view-overview" role="tabpanel" aria-labelledby="tab-overview" hidden></div>
+      <div class="overview" id="view-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0" hidden></div>
       <div class="meeting" id="view-meeting" role="tabpanel" aria-labelledby="tab-meeting" hidden></div>
 
       <div class="view-panel" id="view-findings" role="tabpanel" aria-labelledby="tab-findings">
-      <div class="metrics" id="metrics"></div>
+      <div class="metrics" id="metrics" role="group" aria-label="${tr('Indicateurs', 'Key figures')}"></div>
       <p class="executive-summary" id="executive-summary"></p>
 
-      <section class="audit-panel">
+      <section class="audit-panel" aria-label="${tr('Liste des constats', 'Findings list')}">
         <div class="toolbar">
           <label class="search-field">
             <i data-lucide="search"></i>
-            <input id="finding-search" type="search" placeholder="Rechercher une politique, une adresse, un service" aria-label="Rechercher dans les constats" autocomplete="off" />
+            <span class="sr-only">${tr('Rechercher dans les constats', 'Search findings')}</span>
+            <input id="finding-search" type="search" placeholder="${tr('Rechercher une politique, une adresse, un service', 'Search a policy, an address, a service')}" autocomplete="off" aria-keyshortcuts="/" />
             <kbd aria-hidden="true">/</kbd>
           </label>
-          <div class="filter-chips" id="filter-chips" aria-label="Filtres actifs"></div>
+          <div class="filter-chips" id="filter-chips" role="group" aria-label="${tr('Filtres actifs', 'Active filters')}"></div>
           <details class="filter-menu" id="filter-menu">
-            <summary class="chip" aria-label="Ajouter un filtre"><i data-lucide="plus"></i> Filtre</summary>
+            <summary class="chip"><i data-lucide="plus"></i> ${tr('Filtre', 'Filter')}<span class="sr-only"> : ${tr('ajouter un filtre', 'add a filter')}</span></summary>
             <div class="filter-options">
-              <label class="select-field"><span>Type de constat</span>
-                <select id="category-filter" aria-label="Filtrer par type">
-                  <option value="all">Tous les constats</option>
-                  <option value="permissive">Règles permissives</option>
-                  <option value="shadowed">Règles masquées</option>
-                  <option value="overlap">Chevauchements partiels</option>
-                  <option value="duplicate">Règles dupliquées</option>
-                  <option value="exposure">VIP exposées</option>
-                  <option value="visibility">Visibilité</option>
-                  <option value="unused">Règles inutilisées</option>
-                  <option value="indeterminate">À valider</option>
-                  <option value="temporary">Règles temporaires</option>
-                  <option value="governance">Gouvernance</option>
-                  <option value="security">Profils de sécurité</option>
-                  <option value="inspection">Inspection SSL</option>
-                  <option value="object">Objets</option>
+              <label class="select-field"><span>${tr('Type de constat', 'Finding type')}</span>
+                <select id="category-filter">
+                  <option value="all">${tr('Tous les constats', 'All findings')}</option>
+                  ${findingCategories.map((category) => `<option value="${category}">${categoryFilterLabel(category)}</option>`).join('')}
                 </select>
               </label>
-              <label class="select-field"><span>VDOM</span><select id="vdom-filter" aria-label="Filtrer par VDOM"><option value="all">Tous</option></select></label>
-              <label class="select-field"><span>Interface</span><select id="interface-filter" aria-label="Filtrer par interface"><option value="all">Toutes</option></select></label>
-              <label class="select-field"><span>Source</span><select id="source-filter" aria-label="Filtrer par source"><option value="all">Toutes</option></select></label>
-              <label class="select-field"><span>Destination</span><select id="destination-filter" aria-label="Filtrer par destination"><option value="all">Toutes</option></select></label>
-              <label class="select-field"><span>Service</span><select id="service-filter" aria-label="Filtrer par service"><option value="all">Tous</option></select></label>
-              <label class="select-field"><span>Hit count</span><select id="usage-filter" aria-label="Filtrer par hit count"><option value="all">Tous</option></select></label>
+              <label class="select-field"><span>VDOM</span><select id="vdom-filter"><option value="all">${tr('Tous', 'All')}</option></select></label>
+              <label class="select-field"><span>Interface</span><select id="interface-filter"><option value="all">${tr('Toutes', 'All')}</option></select></label>
+              <label class="select-field"><span>Source</span><select id="source-filter"><option value="all">${tr('Toutes', 'All')}</option></select></label>
+              <label class="select-field"><span>Destination</span><select id="destination-filter"><option value="all">${tr('Toutes', 'All')}</option></select></label>
+              <label class="select-field"><span>Service</span><select id="service-filter"><option value="all">${tr('Tous', 'All')}</option></select></label>
+              <label class="select-field"><span>Hit count</span><select id="usage-filter"><option value="all">${tr('Tous', 'All')}</option></select></label>
             </div>
           </details>
           <label class="acknowledged-toggle">
             <input id="show-acknowledged" type="checkbox" />
-            Afficher les acquittés
+            ${tr('Afficher les acquittés', 'Show acknowledged')}
           </label>
         </div>
 
-        <div class="severity-tabs" id="severity-tabs" aria-label="Filtrer par sévérité"></div>
+        <div class="severity-tabs" id="severity-tabs" role="group" aria-label="${tr('Filtrer par sévérité', 'Filter by severity')}"></div>
         <div class="results-layout" id="results-layout">
-          <div class="findings-list" id="findings-list"></div>
+          <div class="findings-list" id="findings-list" role="region" aria-label="${tr('Constats filtrés', 'Filtered findings')}" aria-keyshortcuts="J K"></div>
           <div class="detail-scrim" id="detail-scrim"></div>
-          <aside class="finding-detail" id="finding-detail" aria-label="Détail du constat"></aside>
+          <section class="finding-detail" id="finding-detail" aria-label="${tr('Détail du constat', 'Finding details')}"></section>
         </div>
       </section>
       </div>
-    </section>
-  </main>
-  <dialog class="markdown-dialog" id="markdown-dialog">
+    </main>
+  </div>
+  <div class="sr-only" id="live-region" role="status" aria-live="polite" aria-atomic="true"></div>
+  <dialog class="markdown-dialog" id="markdown-dialog" aria-labelledby="markdown-dialog-title">
     <div class="dialog-header">
-      <div><p class="eyebrow">Documentation de policy</p><h2>Markdown prêt à copier</h2></div>
-      <button class="icon-button" id="close-markdown" type="button" aria-label="Fermer" title="Fermer"><i data-lucide="x"></i></button>
+      <div><p class="eyebrow">${tr('Documentation de policy', 'Policy documentation')}</p><h2 id="markdown-dialog-title">${tr('Markdown prêt à copier', 'Markdown ready to copy')}</h2></div>
+      <button class="icon-button" id="close-markdown" type="button" aria-label="${tr('Fermer', 'Close')}" title="${tr('Fermer', 'Close')}"><i data-lucide="x"></i></button>
     </div>
-    <textarea id="policy-markdown" readonly aria-label="Documentation Markdown de la policy"></textarea>
+    <textarea id="policy-markdown" readonly aria-label="${tr('Documentation Markdown de la policy', 'Policy documentation in Markdown')}"></textarea>
     <div class="dialog-actions">
       <span id="copy-status" role="status"></span>
-      <button class="acknowledge-button" id="copy-markdown" type="button"><i data-lucide="clipboard"></i>Copier le Markdown</button>
+      <button class="acknowledge-button" id="copy-markdown" type="button"><i data-lucide="clipboard"></i>${tr('Copier le Markdown', 'Copy the Markdown')}</button>
     </div>
   </dialog>
-  <dialog class="meeting-focus" id="meeting-focus" aria-label="Fiche de policy en réunion"></dialog>
-  <dialog class="markdown-dialog" id="minutes-dialog">
+  <dialog class="meeting-focus" id="meeting-focus" aria-labelledby="focus-title"></dialog>
+  <dialog class="markdown-dialog" id="minutes-dialog" aria-labelledby="minutes-dialog-title">
     <div class="dialog-header">
-      <div><p class="eyebrow">Réunion de revue</p><h2>Compte rendu</h2></div>
-      <button class="icon-button" id="close-minutes" type="button" aria-label="Fermer" title="Fermer"><i data-lucide="x"></i></button>
+      <div><p class="eyebrow">${tr('Réunion de revue', 'Review meeting')}</p><h2 id="minutes-dialog-title">${tr('Compte rendu', 'Minutes')}</h2></div>
+      <button class="icon-button" id="close-minutes" type="button" aria-label="${tr('Fermer', 'Close')}" title="${tr('Fermer', 'Close')}"><i data-lucide="x"></i></button>
     </div>
-    <textarea id="minutes-markdown" readonly aria-label="Compte rendu au format Markdown"></textarea>
+    <textarea id="minutes-markdown" readonly aria-label="${tr('Compte rendu au format Markdown', 'Minutes in Markdown')}"></textarea>
     <div class="dialog-actions">
       <span id="minutes-status" role="status"></span>
-      <button class="secondary-button" id="download-minutes-html" type="button"><i data-lucide="file-text"></i>HTML imprimable</button>
-      <button class="secondary-button" id="download-minutes-md" type="button"><i data-lucide="download"></i>Télécharger .md</button>
-      <button class="acknowledge-button" id="copy-minutes" type="button"><i data-lucide="clipboard"></i>Copier</button>
+      <button class="secondary-button" id="download-minutes-html" type="button"><i data-lucide="file-text"></i>${tr('HTML imprimable', 'Printable HTML')}</button>
+      <button class="secondary-button" id="download-minutes-md" type="button"><i data-lucide="download"></i>${tr('Télécharger .md', 'Download .md')}</button>
+      <button class="acknowledge-button" id="copy-minutes" type="button"><i data-lucide="clipboard"></i>${tr('Copier', 'Copy')}</button>
     </div>
   </dialog>
   <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
@@ -291,23 +270,23 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div class="dialog-header"><div><p class="eyebrow" id="confirm-eyebrow"></p><h2 id="confirm-title"></h2></div></div>
       <p class="confirm-message" id="confirm-message"></p>
       <div class="dialog-actions">
-        <button class="secondary-button" id="confirm-cancel" type="submit" value="cancel">Annuler</button>
+        <button class="secondary-button" id="confirm-cancel" type="submit" value="cancel">${tr('Annuler', 'Cancel')}</button>
         <button class="acknowledge-button" id="confirm-accept" type="submit" value="confirm"></button>
       </div>
     </form>
   </dialog>
-  <dialog class="acknowledgement-dialog" id="acknowledgement-dialog">
+  <dialog class="acknowledgement-dialog" id="acknowledgement-dialog" aria-labelledby="acknowledgement-dialog-title" aria-describedby="acknowledgement-title">
     <div class="dialog-header">
-      <div><p class="eyebrow">Revue du constat</p><h2>Acquitter ce constat</h2></div>
-      <button class="icon-button" id="close-acknowledgement" type="button" aria-label="Annuler" title="Annuler"><i data-lucide="x"></i></button>
+      <div><p class="eyebrow">${tr('Revue du constat', 'Finding review')}</p><h2 id="acknowledgement-dialog-title">${tr('Acquitter ce constat', 'Acknowledge this finding')}</h2></div>
+      <button class="icon-button" id="close-acknowledgement" type="button" aria-label="${tr('Annuler', 'Cancel')}" title="${tr('Annuler', 'Cancel')}"><i data-lucide="x"></i></button>
     </div>
     <form id="acknowledgement-form">
       <p id="acknowledgement-title" class="acknowledgement-title"></p>
-      <label class="dialog-field">Justification de l’acquittement<textarea id="acknowledgement-justification" required rows="4" placeholder="Expliquez pourquoi ce constat est accepté temporairement ou définitivement."></textarea></label>
-      <label class="dialog-field">Date de révision<input id="acknowledgement-review-date" type="date" required /></label>
+      <label class="dialog-field">${tr('Justification de l’acquittement', 'Reason for acknowledging')}<textarea id="acknowledgement-justification" required rows="4" autofocus placeholder="${tr('Expliquez pourquoi ce constat est accepté temporairement ou définitivement.', 'Explain why this finding is accepted, temporarily or permanently.')}"></textarea></label>
+      <label class="dialog-field">${tr('Date de révision', 'Review date')}<input id="acknowledgement-review-date" type="date" required /></label>
       <div class="dialog-actions">
-        <button class="secondary-button" id="cancel-acknowledgement" type="button">Annuler</button>
-        <button class="acknowledge-button" type="submit"><i data-lucide="check"></i>Acquitter</button>
+        <button class="secondary-button" id="cancel-acknowledgement" type="button">${tr('Annuler', 'Cancel')}</button>
+        <button class="acknowledge-button" type="submit"><i data-lucide="check"></i>${tr('Acquitter', 'Acknowledge')}</button>
       </div>
     </form>
   </dialog>
@@ -334,7 +313,7 @@ const askConfirmation = (options: ConfirmationOptions): Promise<boolean> => new 
   accept.textContent = options.confirmLabel
   accept.classList.toggle('danger', options.tone === 'danger')
   cancel.hidden = options.cancelLabel === null
-  cancel.textContent = options.cancelLabel ?? 'Annuler'
+  cancel.textContent = options.cancelLabel ?? tr('Annuler', 'Cancel')
   dialog.returnValue = ''
   dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), { once: true })
   dialog.showModal()
@@ -348,10 +327,10 @@ const renderIcons = () => createIcons({
 
 const renderThemeToggle = () => {
   const button = document.querySelector<HTMLButtonElement>('#theme-toggle')!
-  const nextLabel = resolvedTheme === 'dark' ? 'Activer le thème clair' : 'Activer le thème sombre'
+  const nextLabel = resolvedTheme === 'dark' ? tr('Activer le thème clair', 'Switch to light theme') : tr('Activer le thème sombre', 'Switch to dark theme')
   button.setAttribute('aria-label', nextLabel)
   button.title = nextLabel
-  button.innerHTML = `<i data-lucide="${resolvedTheme === 'dark' ? 'sun' : 'moon'}"></i>`
+  button.innerHTML = `<i data-lucide="${resolvedTheme === 'dark' ? 'sun' : 'moon'}" aria-hidden="true"></i>`
   renderIcons()
 }
 
@@ -386,7 +365,7 @@ const renderContextFilters = () => {
   ]
   for (const [id, values, selected] of filterOptions) {
     const select = document.querySelector<HTMLSelectElement>(`#${id}`)
-    if (select) select.innerHTML = options(values, selected, id === 'vdom-filter' ? 'Tous' : id === 'service-filter' ? 'Tous' : 'Toutes')
+    if (select) select.innerHTML = options(values, selected, id === 'vdom-filter' || id === 'service-filter' ? tr('Tous', 'All') : tr('Toutes', 'All'))
   }
   document.querySelector<HTMLSelectElement>('#category-filter')!.value = activeCategory
   renderUsageFilter()
@@ -401,9 +380,9 @@ const renderUsageFilter = () => {
   for (const policy of audit.policies) counts.set(usageBand(policy), (counts.get(usageBand(policy)) ?? 0) + 1)
   const available = audit.policies.length > 0 && (counts.get('unknown') ?? 0) < audit.policies.length
   select.disabled = !available
-  select.title = available ? '' : 'Hit count absent : importez un export CSV qui contient la colonne « Hit Count ».'
-  select.innerHTML = `<option value="all">${available ? 'Tous' : 'Non disponible (export CLI)'}</option>` + (available
-    ? usageBands.filter((band) => counts.get(band) || band === activeUsage).map((band) => `<option value="${band}"${band === activeUsage ? ' selected' : ''}>${usageBandLabels[band]} · ${counts.get(band) ?? 0}</option>`).join('')
+  select.title = available ? '' : tr('Hit count absent : importez un export CSV qui contient la colonne « Hit Count ».', 'No hit count: import a CSV export that has a “Hit Count” column.')
+  select.innerHTML = `<option value="all">${available ? tr('Tous', 'All') : tr('Non disponible (export CLI)', 'Not available (CLI export)')}</option>` + (available
+    ? usageBands.filter((band) => counts.get(band) || band === activeUsage).map((band) => `<option value="${band}"${band === activeUsage ? ' selected' : ''}>${usageBandLabel(band)} · ${counts.get(band) ?? 0}</option>`).join('')
     : '')
 }
 
@@ -412,20 +391,20 @@ const categoryOptionLabel = (value: string) =>
 
 const renderFilterChips = () => {
   const chips: Array<[string, string, string]> = [
-    ['family', 'Famille', activeFamily === 'all' ? '' : familyLabels[activeFamily]],
+    ['family', tr('Famille', 'Family'), activeFamily === 'all' ? '' : familyLabel(activeFamily)],
     ['category', 'Type', activeCategory === 'all' ? '' : categoryOptionLabel(activeCategory)],
     ['vdom', 'VDOM', activeVdom === 'all' ? '' : activeVdom],
     ['interface', 'Interface', activeInterface === 'all' ? '' : activeInterface],
     ['source', 'Source', activeSource === 'all' ? '' : activeSource],
     ['destination', 'Destination', activeDestination === 'all' ? '' : activeDestination],
     ['service', 'Service', activeService === 'all' ? '' : activeService],
-    ['usage', 'Hit count', activeUsage === 'all' ? '' : usageBandLabels[activeUsage]],
+    ['usage', 'Hit count', activeUsage === 'all' ? '' : usageBandLabel(activeUsage)],
   ]
   document.querySelector<HTMLDivElement>('#filter-chips')!.innerHTML = chips
     .filter(([, , value]) => value)
     .map(([key, label, value]) => `
-      <button class="chip" type="button" data-clear-filter="${key}" aria-label="Retirer le filtre ${escapeHtml(label)} ${escapeHtml(value)}">
-        ${escapeHtml(label)} <b>${escapeHtml(value)}</b><i data-lucide="x"></i>
+      <button class="chip" type="button" data-clear-filter="${key}" aria-label="${escapeHtml(tr(`Retirer le filtre ${label} : ${value}`, `Remove filter ${label}: ${value}`))}">
+        ${escapeHtml(label)} <b>${escapeHtml(value)}</b><i data-lucide="x" aria-hidden="true"></i>
       </button>
     `).join('')
 }
@@ -451,15 +430,15 @@ const renderSource = () => {
   document.querySelector<HTMLButtonElement>('#minutes-export-button')!.disabled = !sourceName || !meetingBoard.cards.length
   if (!sourceName) {
     document.querySelector<HTMLDivElement>('#source-file')!.innerHTML = `
-      <div class="source-icon"><i data-lucide="file-search"></i></div>
-      <div><span>En attente</span><strong>Aucune configuration</strong></div>
+      <div class="source-icon" aria-hidden="true"><i data-lucide="file-search"></i></div>
+      <div><span>${tr('En attente', 'Waiting')}</span><strong>${tr('Aucune configuration', 'No configuration')}</strong></div>
     `
     return
   }
   document.querySelector<HTMLDivElement>('#source-file')!.innerHTML = `
-    <div class="source-icon"><i data-lucide="file-search"></i></div>
-    <div><span>Configuration analysée</span><strong title="${escapeHtml(sourceName)}">${escapeHtml(sourceName)}</strong></div>
-    <span class="source-status"><i data-lucide="check-circle-2"></i></span>
+    <div class="source-icon" aria-hidden="true"><i data-lucide="file-search"></i></div>
+    <div><span>${tr('Configuration analysée', 'Analysed configuration')}</span><strong title="${escapeHtml(sourceName)}">${escapeHtml(sourceName)}</strong></div>
+    <span class="source-status" aria-hidden="true"><i data-lucide="check-circle-2"></i></span>
   `
 }
 
@@ -473,36 +452,34 @@ const renderMetrics = () => {
     return
   }
   const metricFilters = [
-    ['Critiques', audit.stats.critical, audit.stats.critical > 0 ? 'critical' : '', 'critical'],
-    ['Permissives', audit.stats.permissive, '', 'permissive'],
-    ['Masquées', audit.stats.shadowed, '', 'shadowed'],
+    [tr('Critiques', 'Critical'), audit.stats.critical, audit.stats.critical > 0 ? 'critical' : '', 'critical'],
+    [tr('Permissives', 'Permissive'), audit.stats.permissive, '', 'permissive'],
+    [tr('Masquées', 'Shadowed'), audit.stats.shadowed, '', 'shadowed'],
   ] as const
   document.querySelector<HTMLDivElement>('#metrics')!.innerHTML = `
     <article class="metric">
-      <span>Politiques actives</span>
+      <span>${tr('Politiques actives', 'Active policies')}</span>
       <strong>${audit.stats.activePolicies}</strong>
     </article>
     ${metricFilters.map(([label, value, tone, filter]) => {
       const isActive = (filter === 'critical' && activeSeverity === 'critical' && activeCategory === 'all') ||
         (filter !== 'critical' && activeSeverity === 'all' && activeCategory === filter)
       return `
-        <button class="metric ${tone} ${isActive ? 'active' : ''}" type="button" data-metric-filter="${filter}" aria-pressed="${isActive}">
+        <button class="metric ${tone} ${isActive ? 'active' : ''}" type="button" data-metric-filter="${filter}" aria-pressed="${isActive}"
+          title="${tr(`Filtrer : ${label.toLowerCase()}`, `Filter: ${label.toLowerCase()}`)}">
           <span>${label}</span>
           <strong>${value}</strong>
         </button>
       `
     }).join('')}
-    <button class="metric ${showAcknowledged ? 'active' : ''}" type="button" data-metric-acknowledged aria-pressed="${showAcknowledged}" title="Afficher ou masquer les constats acquittés">
-      <span>Acquittés</span>
+    <button class="metric ${showAcknowledged ? 'active' : ''}" type="button" data-metric-acknowledged aria-pressed="${showAcknowledged}" title="${tr('Afficher ou masquer les constats acquittés', 'Show or hide acknowledged findings')}">
+      <span>${tr('Acquittés', 'Acknowledged')}</span>
       <strong>${acknowledgedCount()}</strong>
     </button>
   `
 }
 
-const formatShortDate = (iso: string) => {
-  const date = new Date(iso)
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-}
+const formatShortDate = (iso: string) => Number.isNaN(new Date(iso).getTime()) ? '' : formatDate(iso, { day: 'numeric', month: 'short' })
 
 const renderConfigurationScore = () => {
   const container = document.querySelector<HTMLDivElement>('#configuration-score')!
@@ -515,25 +492,25 @@ const renderConfigurationScore = () => {
   const tone = score >= 80 ? 'good' : score >= 60 ? 'warning' : 'critical'
   const trend = computeTrend(historyEntries, sourceName)
   const delta = trend?.previous && trend.scoreDelta !== undefined
-    ? `${trend.scoreDelta > 0 ? '+' : ''}${trend.scoreDelta} depuis le ${formatShortDate(trend.previous.analyzedAt)}`
+    ? tr(`${trend.scoreDelta > 0 ? '+' : ''}${trend.scoreDelta} depuis le ${formatShortDate(trend.previous.analyzedAt)}`, `${trend.scoreDelta > 0 ? '+' : ''}${trend.scoreDelta} since ${formatShortDate(trend.previous.analyzedAt)}`)
     : ''
   container.className = `configuration-score ${tone}`
-  container.innerHTML = `<strong>${score}<small>/100</small></strong>${delta ? `<span>${escapeHtml(delta)}</span>` : ''}`
+  container.innerHTML = `<span class="sr-only">${tr('Note globale de la configuration :', 'Overall configuration score:')} </span><strong>${score}<small>/100</small></strong>${delta ? `<span>${escapeHtml(delta)}</span>` : ''}`
 }
 
 const renderTabs = () => {
   const visible = filteredFindings({ ignoreSeverity: true })
   const count = (severity: Severity) => visible.filter((finding) => finding.severity === severity).length
   const tabs: Array<[string, string, number]> = [
-    ['all', 'Tous', visible.length],
-    ['critical', 'Critiques', count('critical')],
-    ['high', 'Élevés', count('high')],
-    ['medium', 'Moyens', count('medium')],
-    ['low', 'Faibles', count('low')],
+    ['all', tr('Tous', 'All'), visible.length],
+    ['critical', tr('Critiques', 'Critical'), count('critical')],
+    ['high', tr('Élevés', 'High'), count('high')],
+    ['medium', tr('Moyens', 'Medium'), count('medium')],
+    ['low', tr('Faibles', 'Low'), count('low')],
   ]
   document.querySelector<HTMLDivElement>('#severity-tabs')!.innerHTML = tabs.map(([value, label, count]) => `
     <button type="button" data-severity="${value}" class="${activeSeverity === value ? 'active' : ''}" aria-pressed="${activeSeverity === value}">
-      ${label}<span>${count}</span>
+      ${label}<span><span class="sr-only">, </span>${count}</span>
     </button>
   `).join('')
 }
@@ -541,7 +518,7 @@ const renderTabs = () => {
 const renderDetail = (finding: Finding | undefined) => {
   const detail = document.querySelector<HTMLElement>('#finding-detail')!
   if (!finding) {
-    detail.innerHTML = `<div class="empty-detail"><i data-lucide="check-circle-2"></i><strong>Aucun constat</strong><span>Modifiez les filtres ou chargez une autre configuration.</span></div>`
+    detail.innerHTML = `<div class="empty-detail"><i data-lucide="check-circle-2" aria-hidden="true"></i><strong>${tr('Aucun constat', 'No finding')}</strong><span>${tr('Modifiez les filtres ou chargez une autre configuration.', 'Change the filters or load another configuration.')}</span></div>`
     return
   }
   const findingKey = acknowledgementKey(sourceName, finding)
@@ -551,28 +528,28 @@ const renderDetail = (finding: Finding | undefined) => {
   const riskScore = calculateRiskScore(finding, 'standard')
   const elementRisks = policy ? assessPolicyElements(policy) : []
   detail.innerHTML = `
-    <button class="icon-button detail-close" type="button" data-close-detail aria-label="Fermer le détail" title="Fermer"><i data-lucide="x"></i></button>
+    <button class="icon-button detail-close" type="button" data-close-detail aria-label="${tr('Fermer le détail', 'Close details')}" title="${tr('Fermer', 'Close')}"><i data-lucide="x"></i></button>
     <div class="detail-header">
-      <span class="severity-badge ${finding.severity}">${severityLabels[finding.severity]}</span>
-      <span>${escapeHtml(categoryLabels[finding.category])} · règle #${escapeHtml(finding.policyId)} · seq ${finding.order}</span>
-      <strong class="risk-score">Risque ${riskScore}/100</strong>
+      <span class="severity-badge ${finding.severity}">${severityLabel(finding.severity)}</span>
+      <span>${escapeHtml(categoryLabel(finding.category))} · ${tr('règle', 'rule')} #${escapeHtml(finding.policyId)} · seq ${finding.order}</span>
+      <strong class="risk-score">${tr('Risque', 'Risk')} ${riskScore}/100</strong>
     </div>
-    <h2>${escapeHtml(finding.title)}</h2>
+    <h2 id="finding-detail-title">${escapeHtml(finding.title)}</h2>
     <p class="detail-policy">${escapeHtml(finding.policyName)}</p>
-    ${acknowledgement ? `<p class="acknowledgement-note">Acquitté : ${escapeHtml(acknowledgement.justification)} · Revue : ${escapeHtml(acknowledgement.reviewDate || 'non planifiée')}</p>` : ''}
+    ${acknowledgement ? `<p class="acknowledgement-note">${tr('Acquitté :', 'Acknowledged:')} ${escapeHtml(acknowledgement.justification)} · ${tr('Revue :', 'Review:')} ${escapeHtml(acknowledgement.reviewDate || tr('non planifiée', 'not scheduled'))}</p>` : ''}
     ${policy?.hitCount !== undefined || policy?.lastUsed ? `
       <div class="usage-stats">
-        ${policy.hitCount !== undefined ? `<span><strong>${policy.hitCount.toLocaleString('fr-FR')}</strong> correspondances</span>` : ''}
-        ${policy.lastUsed ? `<span>Dernière utilisation <strong>${escapeHtml(policy.lastUsed)}</strong></span>` : ''}
+        ${policy.hitCount !== undefined ? `<span><strong>${formatNumber(policy.hitCount)}</strong> ${plural(policy.hitCount, ['correspondance', 'correspondances'], ['hit', 'hits'])}</span>` : ''}
+        ${policy.lastUsed ? `<span>${tr('Dernière utilisation', 'Last used')} <strong>${escapeHtml(policy.lastUsed)}</strong></span>` : ''}
       </div>
     ` : ''}
     <p class="detail-copy">${escapeHtml(finding.detail)}</p>
     ${elementRisks.length ? `
-      <section class="policy-risk-matrix">
-        <h3>Niveau de risque par élément</h3>
+      <section class="policy-risk-matrix" aria-labelledby="risk-matrix-title">
+        <h3 id="risk-matrix-title">${tr('Niveau de risque par élément', 'Risk level per element')}</h3>
         ${elementRisks.map((element) => `
           <article class="element-risk">
-            <div><strong>${escapeHtml(element.label)}</strong><span class="element-risk-badge ${element.level}">${elementRiskLabels[element.level]}</span></div>
+            <div><strong>${escapeHtml(element.label)}</strong><span class="element-risk-badge ${element.level}">${elementRiskLabel(element.level)}</span></div>
             <code>${escapeHtml(element.value)}</code>
             <p>${escapeHtml(element.reason)}</p>
           </article>
@@ -580,18 +557,18 @@ const renderDetail = (finding: Finding | undefined) => {
       </section>
     ` : ''}
     <div class="evidence">
-      <span>Éléments détectés</span>
-      ${finding.evidence.map((item) => `<p><i data-lucide="alert-triangle"></i>${escapeHtml(item)}</p>`).join('')}
+      <span>${tr('Éléments détectés', 'Detected items')}</span>
+      ${finding.evidence.map((item) => `<p><i data-lucide="alert-triangle" aria-hidden="true"></i>${escapeHtml(item)}</p>`).join('')}
     </div>
     ${renderRecommendation(finding.recommendation)}
     ${renderCompliance(finding)}
     <div class="detail-actions">
       <button class="acknowledge-button ${isAcknowledged ? 'restore' : ''}" type="button" data-acknowledge="${escapeHtml(finding.id)}" aria-keyshortcuts="A">
-        <i data-lucide="check"></i>${isAcknowledged ? 'Restaurer le constat' : 'Acquitter le constat'}<kbd aria-hidden="true">A</kbd>
+        <i data-lucide="check"></i>${isAcknowledged ? tr('Restaurer le constat', 'Restore the finding') : tr('Acquitter le constat', 'Acknowledge the finding')}<kbd aria-hidden="true">A</kbd>
       </button>
-      ${policy ? `<button class="policy-doc-button" type="button" data-policy-doc="${escapeHtml(finding.id)}"><i data-lucide="book-open"></i>Documentation Markdown</button>` : ''}
+      ${policy ? `<button class="policy-doc-button" type="button" data-policy-doc="${escapeHtml(finding.id)}"><i data-lucide="book-open"></i>${tr('Documentation Markdown', 'Markdown documentation')}</button>` : ''}
       ${hasCard(meetingBoard, policyKey(finding))
-        ? `<button class="policy-doc-button" type="button" data-meeting-open="${escapeHtml(policyKey(finding))}"><i data-lucide="presentation"></i>Voir en réunion</button>`
+        ? `<button class="policy-doc-button" type="button" data-meeting-open="${escapeHtml(policyKey(finding))}"><i data-lucide="presentation"></i>${tr('Voir en réunion', 'View in meeting')}</button>`
         : ''}
     </div>
   `
@@ -600,28 +577,28 @@ const renderDetail = (finding: Finding | undefined) => {
 const hasActiveFilters = () => Boolean(searchQuery.trim()) || [activeSeverity, activeCategory, activeFamily, activeVdom, activeInterface, activeSource, activeDestination, activeService, activeUsage].some((value) => value !== 'all')
 
 const renderNoResult = () => hasActiveFilters()
-  ? `<div class="empty-list"><i data-lucide="filter"></i><strong>Aucun constat pour ces filtres</strong><span>Élargissez la recherche ou retirez un filtre.</span><button class="secondary-button" type="button" data-reset-filters>Retirer tous les filtres</button></div>`
-  : `<div class="empty-list"><i data-lucide="check-circle-2"></i><strong>Aucun constat</strong><span>Aucune règle ne présente de problème détecté par l’analyse.</span></div>`
+  ? `<div class="empty-list"><i data-lucide="filter" aria-hidden="true"></i><strong>${tr('Aucun constat pour ces filtres', 'No finding for these filters')}</strong><span>${tr('Élargissez la recherche ou retirez un filtre.', 'Broaden the search or remove a filter.')}</span><button class="secondary-button" type="button" data-reset-filters>${tr('Retirer tous les filtres', 'Remove all filters')}</button></div>`
+  : `<div class="empty-list"><i data-lucide="check-circle-2" aria-hidden="true"></i><strong>${tr('Aucun constat', 'No finding')}</strong><span>${tr('Aucune règle ne présente de problème détecté par l’analyse.', 'The analysis found no issue in any rule.')}</span></div>`
 
 const renderFindings = () => {
   const findings = filteredFindings()
   if (!findings.some((finding) => finding.id === selectedFindingId)) selectedFindingId = findings[0]?.id ?? null
   const list = document.querySelector<HTMLDivElement>('#findings-list')!
   if (!sourceName) {
-    list.innerHTML = `<div class="empty-list"><i data-lucide="upload"></i><strong>Aucune configuration analysée</strong><span>Importez un export FortiGate (.conf, .txt ou .csv). L’analyse se fait dans votre navigateur, aucun fichier n’est envoyé.</span><label class="secondary-button" for="file-input" tabindex="0"><i data-lucide="upload"></i> Choisir un fichier</label></div>`
-    document.querySelector<HTMLElement>('#finding-detail')!.innerHTML = `<div class="empty-detail"><i data-lucide="file-search"></i><span>Le détail de chaque constat et son plan de remédiation s’afficheront ici.</span></div>`
+    list.innerHTML = `<div class="empty-list"><i data-lucide="upload" aria-hidden="true"></i><strong>${tr('Aucune configuration analysée', 'No configuration analysed')}</strong><span>${tr('Importez un export FortiGate (.conf, .txt ou .csv). L’analyse se fait dans votre navigateur, aucun fichier n’est envoyé.', 'Import a FortiGate export (.conf, .txt or .csv). The analysis runs in your browser; no file is uploaded.')}</span><button class="secondary-button" type="button" data-choose-file><i data-lucide="upload"></i> ${tr('Choisir un fichier', 'Choose a file')}</button></div>`
+    document.querySelector<HTMLElement>('#finding-detail')!.innerHTML = `<div class="empty-detail"><i data-lucide="file-search" aria-hidden="true"></i><span>${tr('Le détail de chaque constat et son plan de remédiation s’afficheront ici.', 'Each finding’s details and remediation plan will appear here.')}</span></div>`
     renderIcons()
     return
   }
   list.innerHTML = findings.length ? findings.map((finding) => `
-    <button type="button" class="finding-row ${finding.id === selectedFindingId ? 'selected' : ''}" data-finding-id="${finding.id}" aria-current="${finding.id === selectedFindingId}">
+    <button type="button" class="finding-row ${finding.id === selectedFindingId ? 'selected' : ''}" data-finding-id="${finding.id}"${finding.id === selectedFindingId ? ' aria-current="true"' : ''} aria-controls="finding-detail">
       <span class="severity-line ${finding.severity}"></span>
       <span class="finding-main">
-        <span class="finding-meta"><span class="severity-badge ${finding.severity}">${severityLabels[finding.severity]}</span>${categoryLabels[finding.category]}</span>
+        <span class="finding-meta"><span class="severity-badge ${finding.severity}">${severityLabel(finding.severity)}</span>${categoryLabel(finding.category)}</span>
         <strong>${escapeHtml(finding.policyName)}</strong>
-        <small>Règle #${escapeHtml(finding.policyId)} · ${escapeHtml(finding.title)}</small>
+        <small>${tr('Règle', 'Rule')} #${escapeHtml(finding.policyId)} · ${escapeHtml(finding.title)}</small>
       </span>
-      <i data-lucide="chevron-right"></i>
+      <i data-lucide="chevron-right" aria-hidden="true"></i>
     </button>
   `).join('') : renderNoResult()
   renderDetail(findings.find((finding) => finding.id === selectedFindingId))
@@ -631,14 +608,15 @@ const renderFindings = () => {
 const renderHistoryPanel = () => {
   document.querySelector<HTMLDivElement>('#history-content')!.innerHTML = sourceName
     ? renderHistory(historyEntries, sourceName, historyUnavailable)
-    : '<p class="history-empty">Importez une configuration pour suivre sa note dans le temps.</p>'
+    : `<p class="history-empty">${tr('Importez une configuration pour suivre sa note dans le temps.', 'Import a configuration to track its score over time.')}</p>`
   document.querySelector<HTMLButtonElement>('#history-clear')!.hidden = !historyEntries.length
 }
 
-const refreshHistory = async () => {
+/** Enregistre l'audit dans l'historique ; une réanalyse après changement de langue relit seulement l'historique. */
+const refreshHistory = async (restored = false) => {
   if (!historyStore) return
   try {
-    historyEntries = await recordAudit(historyStore, audit, sourceName)
+    historyEntries = restored ? await historyStore.list() : await recordAudit(historyStore, audit, sourceName)
     historyUnavailable = false
   } catch {
     historyUnavailable = true
@@ -705,7 +683,7 @@ const renderAll = () => {
   renderFindings()
   document.querySelector<HTMLParagraphElement>('#executive-summary')!.textContent = sourceName
     ? createExecutiveSummary(audit)
-    : 'Importez une configuration pour démarrer l’audit.'
+    : tr('Importez une configuration pour démarrer l’audit.', 'Import a configuration to start the audit.')
   renderIcons()
   renderThemeToggle()
 }
@@ -715,7 +693,7 @@ const renderImportErrors = (errors: string[]) => {
   feedback.classList.remove('is-progress')
   feedback.hidden = errors.length === 0
   feedback.innerHTML = errors.length
-    ? `<i data-lucide="alert-triangle"></i><div><strong>Import impossible</strong>${errors.map((error) => `<p>${escapeHtml(error)}</p>`).join('')}</div>`
+    ? `<i data-lucide="alert-triangle" aria-hidden="true"></i><div><strong>${tr('Import impossible', 'Import failed')}</strong>${errors.map((error) => `<p>${escapeHtml(error)}</p>`).join('')}</div>`
     : ''
   renderIcons()
 }
@@ -740,15 +718,19 @@ const analyzeWithWorker = (content: string, fileName: string): Promise<ImportedA
     worker.terminate()
     reject(error)
   }
-  worker.postMessage({ content, fileName })
+  worker.postMessage({ content, fileName, locale: getLocale() })
 })
 
-const loadConfiguration = async (content: string, name: string) => {
+/** Dernier fichier importé, gardé en mémoire pour le réanalyser après un changement de langue. */
+let lastImport: { content: string, name: string } | null = null
+
+const loadConfiguration = async (content: string, name: string, options: { restored?: boolean } = {}) => {
   const nextAudit = await analyzeWithWorker(content, name)
   renderImportErrors(nextAudit.importErrors)
   if (!nextAudit.policies.length) {
     return
   }
+  lastImport = { content, name }
   audit = nextAudit
   sourceName = name
   meetingBoard = reconcileBoard(meetingStore.load(name) ?? createBoard(name), audit)
@@ -756,17 +738,26 @@ const loadConfiguration = async (content: string, name: string) => {
   selectedFindingId = audit.findings[0]?.id ?? null
   renderAll()
   setView(viewFromHash() ?? 'overview')
-  await refreshHistory()
+  document.querySelector<HTMLDivElement>('#import-feedback')!.hidden = !nextAudit.importErrors.length
+  announce(tr(
+    `Analyse terminée : ${audit.stats.activePolicies} politiques actives, ${audit.findings.length} constats.`,
+    `Analysis complete: ${audit.stats.activePolicies} active policies, ${audit.findings.length} findings.`,
+  ))
+  await refreshHistory(options.restored)
 }
 
 const handleFile = async (file?: File) => {
   if (!file) return
   if (file.size > 10 * 1024 * 1024) {
+    const size = (file.size / 1024 / 1024).toLocaleString(getLocale() === 'en' ? 'en-GB' : 'fr-FR', { maximumFractionDigits: 1 })
     void askConfirmation({
-      eyebrow: 'Import impossible',
-      title: 'Fichier trop volumineux',
-      message: `${file.name} pèse ${(file.size / 1024 / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mo, au-delà de la limite de 10 Mo. Exportez uniquement la section « config firewall policy » ou le VDOM concerné.`,
-      confirmLabel: 'Compris',
+      eyebrow: tr('Import impossible', 'Import failed'),
+      title: tr('Fichier trop volumineux', 'File too large'),
+      message: tr(
+        `${file.name} pèse ${size} Mo, au-delà de la limite de 10 Mo. Exportez uniquement la section « config firewall policy » ou le VDOM concerné.`,
+        `${file.name} is ${size} MB, above the 10 MB limit. Export only the “config firewall policy” section or the relevant VDOM.`,
+      ),
+      confirmLabel: tr('Compris', 'OK'),
       cancelLabel: null,
     })
     return
@@ -779,10 +770,13 @@ document.querySelector<HTMLInputElement>('#file-input')!.addEventListener('chang
 })
 document.querySelector<HTMLButtonElement>('#history-clear')!.addEventListener('click', async () => {
   if (!historyStore || !await askConfirmation({
-    eyebrow: 'Historique local',
-    title: 'Effacer l’historique ?',
-    message: 'Les notes et compteurs de tous les audits enregistrés dans ce navigateur seront supprimés. Les configurations elles-mêmes ne sont jamais stockées.',
-    confirmLabel: 'Effacer l’historique',
+    eyebrow: tr('Historique local', 'Local history'),
+    title: tr('Effacer l’historique ?', 'Clear the history?'),
+    message: tr(
+      'Les notes et compteurs de tous les audits enregistrés dans ce navigateur seront supprimés. Les configurations elles-mêmes ne sont jamais stockées.',
+      'The scores and counters of every audit recorded in this browser will be deleted. Configurations themselves are never stored.',
+    ),
+    confirmLabel: tr('Effacer l’historique', 'Clear the history'),
     tone: 'danger',
   })) return
   try { await historyStore.clear() } catch { historyUnavailable = true }
@@ -806,9 +800,14 @@ document.querySelector<HTMLInputElement>('#compare-input')!.addEventListener('ch
     const summary = document.querySelector<HTMLDivElement>('#comparison-summary')!
     summary.hidden = false
     const modifications = comparison.modified.map(({ after, changedFields }) =>
-      `<li>Règle #${escapeHtml(after.id)} : ${escapeHtml(changedFields.join(', ') || 'champs non détaillés')}</li>`,
+      `<li>${tr('Règle', 'Rule')} #${escapeHtml(after.id)}${tr(' : ', ': ')}${escapeHtml(changedFields.join(', ') || tr('champs non détaillés', 'fields not detailed'))}</li>`,
     ).join('')
-    summary.innerHTML = `<strong>Comparaison avec ${escapeHtml(file.name)}</strong><span>${comparison.added.length} ajoutée(s)</span><span>${comparison.modified.length} modifiée(s)</span><span>${comparison.removed.length} supprimée(s)</span>${modifications ? `<ul>${modifications}</ul>` : ''}`
+    const counted = (count: number, fr: [string, string], en: [string, string]) => `${count} ${plural(count, fr, en)}`
+    summary.innerHTML = `<strong>${tr('Comparaison avec', 'Comparison with')} ${escapeHtml(file.name)}</strong>`
+      + `<span>${counted(comparison.added.length, ['ajoutée', 'ajoutées'], ['added', 'added'])}</span>`
+      + `<span>${counted(comparison.modified.length, ['modifiée', 'modifiées'], ['modified', 'modified'])}</span>`
+      + `<span>${counted(comparison.removed.length, ['supprimée', 'supprimées'], ['removed', 'removed'])}</span>`
+      + `${modifications ? `<ul>${modifications}</ul>` : ''}`
   })
 })
 document.querySelector<HTMLSelectElement>('#category-filter')!.addEventListener('change', (event) => {
@@ -936,7 +935,7 @@ document.querySelector<HTMLButtonElement>('#copy-markdown')!.addEventListener('c
     textarea.select()
     document.execCommand('copy')
   }).finally(() => {
-    document.querySelector<HTMLSpanElement>('#copy-status')!.textContent = 'Markdown copié'
+    document.querySelector<HTMLSpanElement>('#copy-status')!.textContent = tr('Markdown copié', 'Markdown copied')
   })
 })
 const closeAcknowledgementDialog = () => {
@@ -966,7 +965,11 @@ document.querySelector<HTMLFormElement>('#acknowledgement-form')!.addEventListen
   refreshFindingsView()
 })
 
-const dropzone = document.querySelector<HTMLLabelElement>('#dropzone')!
+const dropzone = document.querySelector<HTMLButtonElement>('#dropzone')!
+// Les boutons « choisir un fichier » (barre latérale, état vide) ouvrent le sélecteur de fichier natif.
+document.addEventListener('click', (event) => {
+  if ((event.target as HTMLElement).closest('[data-choose-file]')) document.querySelector<HTMLInputElement>('#file-input')!.click()
+})
 for (const eventName of ['dragenter', 'dragover']) {
   dropzone.addEventListener(eventName, (event) => {
     event.preventDefault()
@@ -985,7 +988,7 @@ document.querySelector<HTMLButtonElement>('#export-button')!.addEventListener('c
   const csv = serializeFindingsCsv(audit.findings)
   const link = document.createElement('a')
   link.href = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }))
-  link.download = 'audit-fortigate.csv'
+  link.download = tr('audit-fortigate.csv', 'fortigate-audit.csv')
   link.click()
   URL.revokeObjectURL(link.href)
   document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
@@ -1000,15 +1003,15 @@ const downloadText = (content: string, fileName: string, type: string) => {
 }
 
 document.querySelector<HTMLButtonElement>('#html-report-button')!.addEventListener('click', () => {
-  downloadText(renderHtmlReport(audit, sourceName), 'rapport-fortiscope.html', 'text/html;charset=utf-8')
+  downloadText(renderHtmlReport(audit, sourceName), tr('rapport-fortiscope.html', 'fortiscope-report.html'), 'text/html;charset=utf-8')
   document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
 })
 document.querySelector<HTMLButtonElement>('#cli-export-button')!.addEventListener('click', () => {
-  downloadText(serializeRecommendationsCli(audit.findings), 'remediations-fortigate.cli', 'text/plain;charset=utf-8')
+  downloadText(serializeRecommendationsCli(audit.findings), tr('remediations-fortigate.cli', 'fortigate-remediations.cli'), 'text/plain;charset=utf-8')
   document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
 })
 document.querySelector<HTMLButtonElement>('#ack-export-button')!.addEventListener('click', () => {
-  downloadText(serializeAcknowledgements([...acknowledgementMetadata.values()]), 'acquittements-fortiscope.json', 'application/json;charset=utf-8')
+  downloadText(serializeAcknowledgements([...acknowledgementMetadata.values()]), tr('acquittements-fortiscope.json', 'fortiscope-acknowledgements.json'), 'application/json;charset=utf-8')
   document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
 })
 document.querySelector<HTMLButtonElement>('#ack-import-button')!.addEventListener('click', () => document.querySelector<HTMLInputElement>('#ack-import-input')!.click())
@@ -1026,10 +1029,22 @@ document.querySelector<HTMLInputElement>('#ack-import-input')!.addEventListener(
       localStorage.setItem('fortiscope-acknowledgement-meta', JSON.stringify(Object.fromEntries(acknowledgementMetadata)))
       refreshFindingsView()
     } catch {
-      renderImportErrors(['Fichier d’acquittements invalide.'])
+      renderImportErrors([tr('Fichier d’acquittements invalide.', 'Invalid acknowledgements file.')])
     }
   })
 })
+
+/** Annonce un message aux lecteurs d'écran via la zone `aria-live` (sans déplacer le focus). */
+let announceTimer: number | undefined
+const announce = (message: string, delay = 0) => {
+  window.clearTimeout(announceTimer)
+  announceTimer = window.setTimeout(() => {
+    const region = document.querySelector<HTMLDivElement>('#live-region')!
+    // Vider puis remplir garantit la relecture d'un message identique.
+    region.textContent = ''
+    window.setTimeout(() => { region.textContent = message }, 50)
+  }, delay)
+}
 
 const refreshFindingsView = () => {
   if (syncMeeting()) renderMeetingPanel()
@@ -1038,6 +1053,10 @@ const refreshFindingsView = () => {
   renderMetrics()
   renderTabs()
   renderFindings()
+  if (sourceName && activeView === 'findings') {
+    const count = filteredFindings().length
+    announce(`${count} ${plural(count, ['constat affiché', 'constats affichés'], ['finding shown', 'findings shown'])}`, 400)
+  }
 }
 
 const selectFinding = (id: string | null) => {
@@ -1058,8 +1077,9 @@ const moveSelection = (step: number) => {
 const copyCli = (button: HTMLButtonElement) => {
   const code = button.closest('.cli-preview')?.querySelector('code')?.textContent ?? ''
   const done = () => {
-    button.textContent = 'Copié'
-    window.setTimeout(() => { button.textContent = 'Copier' }, 2000)
+    button.textContent = tr('Copié', 'Copied')
+    announce(tr('Commande CLI copiée', 'CLI command copied'))
+    window.setTimeout(() => { button.textContent = tr('Copier', 'Copy') }, 2000)
   }
   void (navigator.clipboard?.writeText(code) ?? Promise.reject(new Error('clipboard'))).then(done, () => {
     const range = document.createRange()
@@ -1109,13 +1129,6 @@ document.querySelector<HTMLDivElement>('#filter-chips')!.addEventListener('click
 document.querySelector<HTMLDetailsElement>('#filter-menu')!.addEventListener('change', () => {
   document.querySelector<HTMLDetailsElement>('#filter-menu')!.open = false
 })
-document.addEventListener('keydown', (event) => {
-  if (!(event.target instanceof HTMLLabelElement) || event.target.htmlFor !== 'file-input') return
-  if (event.key === 'Enter' || event.key === ' ') {
-    event.preventDefault()
-    document.querySelector<HTMLInputElement>('#file-input')!.click()
-  }
-})
 
 const isTyping = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
@@ -1163,10 +1176,13 @@ document.querySelector<HTMLElement>('.view-tabs')!.addEventListener('click', (ev
   if (tab && !tab.disabled) setView(tab.dataset.view as View)
 })
 document.querySelector<HTMLElement>('.view-tabs')!.addEventListener('keydown', (event) => {
-  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault()
   const enabled = views.filter((view) => !document.querySelector<HTMLButtonElement>(`.view-tabs [data-view="${view}"]`)?.disabled)
   const index = enabled.indexOf(activeView)
-  const next = enabled[(index + (event.key === 'ArrowRight' ? 1 : enabled.length - 1)) % enabled.length] ?? activeView
+  const next = event.key === 'Home' ? enabled[0]
+    : event.key === 'End' ? enabled[enabled.length - 1]
+      : enabled[(index + (event.key === 'ArrowRight' ? 1 : enabled.length - 1)) % enabled.length] ?? activeView
   setView(next)
   document.querySelector<HTMLButtonElement>(`.view-tabs [data-view="${next}"]`)?.focus()
 })
@@ -1285,6 +1301,8 @@ const stepFocus = (step: number) => {
 
 const decideFocused = (column: MeetingColumn) => {
   if (!focusKey) return
+  const decided = meetingBoard.cards.find((card) => card.policyKey === focusKey)
+  if (decided) announce(tr(`Règle ${decided.policyId} : ${meetingColumnLabel(column).toLowerCase()}`, `Rule ${decided.policyId}: ${meetingColumnLabel(column).toLowerCase()}`))
   meetingBoard = moveCard(meetingBoard, focusKey, column)
   persistMeeting()
   const index = focusQueue.indexOf(focusKey)
@@ -1299,7 +1317,7 @@ const openMinutes = () => {
   minutesDialog.showModal()
 }
 
-const minutesFileName = (extension: string) => `compte-rendu-reunion-${meetingBoard.date || 'sans-date'}.${extension}`
+const minutesFileName = (extension: string) => `${tr('compte-rendu-reunion', 'meeting-minutes')}-${meetingBoard.date || tr('sans-date', 'undated')}.${extension}`
 
 meetingPanel.addEventListener('click', (event) => {
   const target = event.target as HTMLElement
@@ -1335,10 +1353,13 @@ meetingPanel.addEventListener('click', (event) => {
   }
   if (target.closest('[data-meeting-clear]')) {
     void askConfirmation({
-      eyebrow: 'Réunion de revue',
-      title: 'Réinitialiser le tableau ?',
-      message: 'Les notes, propositions modifiées, décisions et horaires de séance seront effacés. Le tableau sera reconstruit à partir des constats ouverts ; l’audit lui-même n’est pas modifié.',
-      confirmLabel: 'Réinitialiser',
+      eyebrow: tr('Réunion de revue', 'Review meeting'),
+      title: tr('Réinitialiser le tableau ?', 'Reset the board?'),
+      message: tr(
+        'Les notes, propositions modifiées, décisions et horaires de séance seront effacés. Le tableau sera reconstruit à partir des constats ouverts ; l’audit lui-même n’est pas modifié.',
+        'Notes, changed proposals, decisions and meeting times will be erased. The board will be rebuilt from the open findings; the audit itself is not changed.',
+      ),
+      confirmLabel: tr('Réinitialiser', 'Reset'),
       tone: 'danger',
     }).then((confirmed) => {
       if (!confirmed) return
@@ -1385,8 +1406,10 @@ meetingPanel.addEventListener('keydown', (event) => {
     openFocus(key)
   } else if (/^[1-5]$/.test(event.key)) {
     event.preventDefault()
-    commitMeeting(moveCard(meetingBoard, key, meetingColumns[Number(event.key) - 1]))
+    const column = meetingColumns[Number(event.key) - 1]
+    commitMeeting(moveCard(meetingBoard, key, column))
     focusCardElement(key)
+    announce(tr(`Déplacée vers ${meetingColumnLabel(column)}`, `Moved to ${meetingColumnLabel(column)}`))
   } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
     event.preventDefault()
     const sibling = event.key === 'ArrowDown' ? card.nextElementSibling : card.previousElementSibling
@@ -1494,7 +1517,7 @@ focusDialog.addEventListener('change', (event) => {
 
 focusDialog.addEventListener('keydown', (event) => {
   if (event.ctrlKey || event.metaKey || event.altKey || isTyping(event.target)) return
-  const column = decisionKeys[event.key.toLowerCase()]
+  const column = decisionKeys()[event.key.toLowerCase()]
   if (column) {
     event.preventDefault()
     decideFocused(column)
@@ -1525,7 +1548,7 @@ document.querySelector<HTMLButtonElement>('#copy-minutes')!.addEventListener('cl
     textarea.select()
     document.execCommand('copy')
   }).finally(() => {
-    document.querySelector<HTMLSpanElement>('#minutes-status')!.textContent = 'Compte rendu copié'
+    document.querySelector<HTMLSpanElement>('#minutes-status')!.textContent = tr('Compte rendu copié', 'Minutes copied')
   })
 })
 document.querySelector<HTMLButtonElement>('#download-minutes-md')!.addEventListener('click', () => {
@@ -1535,6 +1558,45 @@ document.querySelector<HTMLButtonElement>('#download-minutes-html')!.addEventLis
   downloadText(renderMinutesHtml(meetingBoard, audit), minutesFileName('html'), 'text/html;charset=utf-8')
 })
 
+/* ---------- Langue ---------- */
+/** Fichier en attente de réanalyse après un changement de langue (lu puis effacé aussitôt). */
+const pendingImportKey = 'fortiscope-pending-import'
+
+document.querySelector<HTMLButtonElement>('#locale-toggle')!.addEventListener('click', async () => {
+  // La langue est fixée au chargement : la changer recharge la page. Le fichier analysé est confié à
+  // sessionStorage (propre à cet onglet) le temps du rechargement, puis effacé dès sa relecture.
+  if (lastImport) {
+    try {
+      sessionStorage.setItem(pendingImportKey, JSON.stringify(lastImport))
+    } catch {
+      const proceed = await askConfirmation({
+        eyebrow: otherLocale === 'en' ? 'Language' : 'Langue',
+        title: otherLocale === 'en' ? 'Re-import the file?' : 'Réimporter le fichier ?',
+        message: otherLocale === 'en'
+          ? 'This file is too large to be kept while the page reloads. You will need to import it again.'
+          : 'Ce fichier est trop volumineux pour être conservé pendant le rechargement. Il faudra l’importer de nouveau.',
+        confirmLabel: otherLocale === 'en' ? 'Switch to English' : 'Passer en français',
+      })
+      if (!proceed) return
+    }
+  }
+  try { localStorage.setItem(localeStorageKey, otherLocale) } catch { /* préférence non enregistrée */ }
+  location.reload()
+})
 
 renderAll()
 setView('findings', false)
+
+const restorePendingImport = () => {
+  let pending: { content?: unknown, name?: unknown } | null = null
+  try {
+    pending = JSON.parse(sessionStorage.getItem(pendingImportKey) ?? 'null')
+    sessionStorage.removeItem(pendingImportKey)
+  } catch {
+    return
+  }
+  if (pending && typeof pending.content === 'string' && typeof pending.name === 'string') {
+    void loadConfiguration(pending.content, pending.name, { restored: true })
+  }
+}
+restorePendingImport()

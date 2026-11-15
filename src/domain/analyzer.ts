@@ -6,6 +6,7 @@ export type {
   Severity,
 } from './audit'
 import type { AuditResult, FirewallPolicy, Finding, Severity } from './audit'
+import { tr } from '../i18n'
 
 type Fields = Record<string, string[]>
 
@@ -118,10 +119,10 @@ const parsePolicies = (
     const inspectionProfile = profileValues('ssl-ssh-profile')[0]
     const temporary = field(fields, 'temporary')[0] === 'enable' || Boolean(expirationDate) || /\btemporary\b|\btemporaire\b/i.test(comments)
     const governanceGaps = [
-      !name ? 'Nom de règle absent' : '',
-      !comments ? 'Commentaire absent' : '',
-      !ticket ? 'Ticket de changement absent' : '',
-      !owner ? 'Propriétaire absent' : '',
+      !name ? tr('Nom de règle absent', 'Missing rule name') : '',
+      !comments ? tr('Commentaire absent', 'Missing comment') : '',
+      !ticket ? tr('Ticket de changement absent', 'Missing change ticket') : '',
+      !owner ? tr('Propriétaire absent', 'Missing owner') : '',
     ].filter(Boolean)
     return {
     id,
@@ -136,8 +137,8 @@ const parsePolicies = (
     groups: field(fields, 'groups'),
     devices: field(fields, 'devices'),
     indeterminateCriteria: [
-      ...field(fields, 'srcaddr').filter((name) => dynamicNames.has(name.toLowerCase())).map((name) => `Source dynamique : ${name}`),
-      ...field(fields, 'dstaddr').filter((name) => dynamicNames.has(name.toLowerCase())).map((name) => `Destination dynamique : ${name}`),
+      ...field(fields, 'srcaddr').filter((name) => dynamicNames.has(name.toLowerCase())).map((name) => tr(`Source dynamique : ${name}`, `Dynamic source: ${name}`)),
+      ...field(fields, 'dstaddr').filter((name) => dynamicNames.has(name.toLowerCase())).map((name) => tr(`Destination dynamique : ${name}`, `Dynamic destination: ${name}`)),
     ],
     service: field(fields, 'service'),
     schedule: field(fields, 'schedule', ['always']),
@@ -562,13 +563,13 @@ const policiesIntersect = (
 )
 
 const coverageEvidence = (covering: FirewallPolicy, covered: FirewallPolicy): string[] => [
-  `Interfaces entrantes couvertes : ${covering.srcintf.join(', ')} couvre ${covered.srcintf.join(', ')}`,
-  `Interfaces sortantes couvertes : ${covering.dstintf.join(', ')} couvre ${covered.dstintf.join(', ')}`,
-  `Sources couvertes : ${covering.srcaddr.join(', ')} couvre ${covered.srcaddr.join(', ')}`,
-  `Destinations couvertes : ${covering.dstaddr.join(', ')} couvre ${covered.dstaddr.join(', ')}`,
-  `Services couverts : ${covering.service.join(', ')} couvre ${covered.service.join(', ')}`,
-  `Horaires couverts : ${covering.schedule.join(', ')} couvre ${covered.schedule.join(', ')}`,
-  `Action identique : ${covered.action}`,
+  tr(`Interfaces entrantes couvertes : ${covering.srcintf.join(', ')} couvre ${covered.srcintf.join(', ')}`, `Incoming interfaces covered: ${covering.srcintf.join(', ')} covers ${covered.srcintf.join(', ')}`),
+  tr(`Interfaces sortantes couvertes : ${covering.dstintf.join(', ')} couvre ${covered.dstintf.join(', ')}`, `Outgoing interfaces covered: ${covering.dstintf.join(', ')} covers ${covered.dstintf.join(', ')}`),
+  tr(`Sources couvertes : ${covering.srcaddr.join(', ')} couvre ${covered.srcaddr.join(', ')}`, `Sources covered: ${covering.srcaddr.join(', ')} covers ${covered.srcaddr.join(', ')}`),
+  tr(`Destinations couvertes : ${covering.dstaddr.join(', ')} couvre ${covered.dstaddr.join(', ')}`, `Destinations covered: ${covering.dstaddr.join(', ')} covers ${covered.dstaddr.join(', ')}`),
+  tr(`Services couverts : ${covering.service.join(', ')} couvre ${covered.service.join(', ')}`, `Services covered: ${covering.service.join(', ')} covers ${covered.service.join(', ')}`),
+  tr(`Horaires couverts : ${covering.schedule.join(', ')} couvre ${covered.schedule.join(', ')}`, `Schedules covered: ${covering.schedule.join(', ')} covers ${covered.schedule.join(', ')}`),
+  tr(`Action identique : ${covered.action}`, `Same action: ${covered.action}`),
 ]
 
 const permissiveFinding = (policy: FirewallPolicy): Finding | null => {
@@ -585,8 +586,8 @@ const permissiveFinding = (policy: FirewallPolicy): Finding | null => {
   if (hasAllDestination) evidence.push('Destination: all')
   if (hasAllServices) evidence.push(`Service: ${broadServices.join(', ')}`)
   if (hasAnyInterface) evidence.push('Interface: any')
-  if (policy.schedule.some((value) => value.toLowerCase() === 'always')) evidence.push('Horaire: always')
-  if (policy.utmStatus !== 'enable') evidence.push('Profils de sécurité: désactivés')
+  if (policy.schedule.some((value) => value.toLowerCase() === 'always')) evidence.push(tr('Horaire: always', 'Schedule: always'))
+  if (policy.utmStatus !== 'enable') evidence.push(tr('Profils de sécurité: désactivés', 'Security profiles: disabled'))
 
   const broadDimensions = [hasAllSource, hasAllDestination, hasAllServices, hasAnyInterface].filter(Boolean).length
   if (broadDimensions < 2 && !hasAnyInterface) return null
@@ -596,19 +597,19 @@ const permissiveFinding = (policy: FirewallPolicy): Finding | null => {
   const actions: string[] = []
   const cliChanges: string[] = []
   if (hasAllSource) {
-    actions.push('Remplacer les sources globales par les objets ou groupes autorisés.')
-    cliChanges.push('set srcaddr "<groupe-sources-validé>"')
+    actions.push(tr('Remplacer les sources globales par les objets ou groupes autorisés.', 'Replace the global sources with the authorised objects or groups.'))
+    cliChanges.push(tr('set srcaddr "<groupe-sources-validé>"', 'set srcaddr "<approved-source-group>"'))
   }
   if (hasAllDestination) {
-    actions.push('Limiter les destinations aux ressources nécessaires au flux.')
-    cliChanges.push('set dstaddr "<groupe-destinations-validé>"')
+    actions.push(tr('Limiter les destinations aux ressources nécessaires au flux.', 'Limit destinations to the resources the flow actually needs.'))
+    cliChanges.push(tr('set dstaddr "<groupe-destinations-validé>"', 'set dstaddr "<approved-destination-group>"'))
   }
   if (hasAllServices) {
-    actions.push('Remplacer ALL, ALL_TCP et ALL_UDP par les services applicatifs strictement requis.')
-    cliChanges.push('set service "<groupe-services-validé>"')
+    actions.push(tr('Remplacer ALL, ALL_TCP et ALL_UDP par les services applicatifs strictement requis.', 'Replace ALL, ALL_TCP and ALL_UDP with the application services strictly required.'))
+    cliChanges.push(tr('set service "<groupe-services-validé>"', 'set service "<approved-service-group>"'))
   }
-  if (hasAnyInterface) actions.push('Sélectionner explicitement les interfaces d’entrée et de sortie attendues.')
-  if (policy.utmStatus !== 'enable') actions.push('Évaluer et activer les profils de sécurité adaptés au trafic autorisé.')
+  if (hasAnyInterface) actions.push(tr('Sélectionner explicitement les interfaces d’entrée et de sortie attendues.', 'Explicitly select the expected incoming and outgoing interfaces.'))
+  if (policy.utmStatus !== 'enable') actions.push(tr('Évaluer et activer les profils de sécurité adaptés au trafic autorisé.', 'Assess and enable the security profiles suited to the allowed traffic.'))
   return {
     id: findingId('permissive', policy),
     policyId: policy.id,
@@ -618,13 +619,13 @@ const permissiveFinding = (policy: FirewallPolicy): Finding | null => {
     order: policy.order,
     severity,
     category: 'permissive',
-    title: interfaceOnly ? 'Interfaces non restreintes' : severity === 'critical' ? 'Règle très permissive' : 'Périmètre trop large',
+    title: interfaceOnly ? tr('Interfaces non restreintes', 'Unrestricted interfaces') : severity === 'critical' ? tr('Règle très permissive', 'Highly permissive rule') : tr('Périmètre trop large', 'Scope too broad'),
     detail: interfaceOnly
-      ? 'Cette règle utilise l’interface « any » : elle s’applique à tous les chemins réseau, y compris ceux qui n’étaient pas prévus.'
-      : 'Cette règle autorise plusieurs dimensions sans restriction. Vérifiez que son périmètre correspond au besoin métier.',
+      ? tr('Cette règle utilise l’interface « any » : elle s’applique à tous les chemins réseau, y compris ceux qui n’étaient pas prévus.', 'This rule uses the “any” interface: it applies to every network path, including unintended ones.')
+      : tr('Cette règle autorise plusieurs dimensions sans restriction. Vérifiez que son périmètre correspond au besoin métier.', 'This rule allows several dimensions without restriction. Check that its scope matches the business need.'),
     evidence,
     recommendation: {
-      summary: 'Appliquer le principe du moindre privilège à chaque critère de correspondance de la politique.',
+      summary: tr('Appliquer le principe du moindre privilège à chaque critère de correspondance de la politique.', 'Apply the principle of least privilege to every match criterion of the policy.'),
       actions,
       cli: cliChanges.length
         ? `config firewall policy\n    edit ${policy.id}\n        ${cliChanges.join('\n        ')}\n    next\nend`
@@ -646,14 +647,14 @@ const exposureFinding = (policy: FirewallPolicy): Finding | null => {
     order: policy.order,
     severity: 'high',
     category: 'exposure',
-    title: 'VIP exposée à toutes les sources',
-    detail: `La publication ${policy.destinationVips.join(', ')} accepte des connexions depuis toutes les adresses source.`,
+    title: tr('VIP exposée à toutes les sources', 'VIP exposed to all sources'),
+    detail: tr(`La publication ${policy.destinationVips.join(', ')} accepte des connexions depuis toutes les adresses source.`, `The published service ${policy.destinationVips.join(', ')} accepts connections from every source address.`),
     evidence: ['Source: all', `VIP: ${policy.destinationVips.join(', ')}`],
     recommendation: {
-      summary: 'Limiter l’exposition de la ressource publiée aux sources qui ont réellement besoin d’y accéder.',
+      summary: tr('Limiter l’exposition de la ressource publiée aux sources qui ont réellement besoin d’y accéder.', 'Limit exposure of the published resource to the sources that actually need access.'),
       actions: [
-        'Définir des objets ou groupes pour les sources autorisées lorsque le service n’est pas public.',
-        'Conserver uniquement les services requis et activer les profils de sécurité adaptés.',
+        tr('Définir des objets ou groupes pour les sources autorisées lorsque le service n’est pas public.', 'Define objects or groups for the authorised sources when the service is not public.'),
+        tr('Conserver uniquement les services requis et activer les profils de sécurité adaptés.', 'Keep only the required services and enable suitable security profiles.'),
       ],
       reference: FORTINET_FIREWALL_POLICY_REFERENCE,
     },
@@ -666,7 +667,7 @@ const unusedFinding = (policy: FirewallPolicy): Finding | null => {
   const neverUsed = policy.hitCount === 0 || (policy.lastUsed !== undefined && /^(never|jamais)$/i.test(policy.lastUsed.trim()))
   const stale = policy.lastUsed !== undefined && !Number.isNaN(Date.parse(policy.lastUsed)) && Date.parse(policy.lastUsed) < staleCutoff
   if (!neverUsed && !stale) return null
-  const reason = neverUsed ? 'aucune correspondance enregistrée' : `dernière utilisation le ${policy.lastUsed}`
+  const reason = neverUsed ? tr('aucune correspondance enregistrée', 'no recorded hits') : tr(`dernière utilisation le ${policy.lastUsed}`, `a last use on ${policy.lastUsed}`)
   return {
     id: findingId('unused', policy),
     policyId: policy.id,
@@ -676,17 +677,17 @@ const unusedFinding = (policy: FirewallPolicy): Finding | null => {
     order: policy.order,
     severity: 'medium',
     category: 'unused',
-    title: 'Règle probablement inutilisée',
-    detail: `Cette règle est active mais présente ${reason}. Validez son usage avant de la conserver ou de la supprimer.`,
+    title: tr('Règle probablement inutilisée', 'Rule probably unused'),
+    detail: tr(`Cette règle est active mais présente ${reason}. Validez son usage avant de la conserver ou de la supprimer.`, `This rule is active but shows ${reason}. Confirm its use before keeping or deleting it.`),
     evidence: [
       policy.hitCount !== undefined ? `Hit Count: ${policy.hitCount}` : '',
       policy.lastUsed ? `Last Used: ${policy.lastUsed}` : '',
     ].filter(Boolean),
     recommendation: {
-      summary: 'Valider l’absence de trafic métier avant de désactiver cette règle.',
+      summary: tr('Valider l’absence de trafic métier avant de désactiver cette règle.', 'Confirm there is no business traffic before disabling this rule.'),
       actions: [
-        'Confirmer avec les journaux et le propriétaire applicatif qu’aucun flux légitime ne dépend de cette règle.',
-        'Désactiver la règle pendant une période d’observation avant sa suppression.',
+        tr('Confirmer avec les journaux et le propriétaire applicatif qu’aucun flux légitime ne dépend de cette règle.', 'Check the logs and the application owner to confirm that no legitimate flow depends on this rule.'),
+        tr('Désactiver la règle pendant une période d’observation avant sa suppression.', 'Disable the rule for an observation period before deleting it.'),
       ],
       cli: `config firewall policy\n    edit ${policy.id}\n        set status disable\n    next\nend`,
       reference: FORTINET_FIREWALL_POLICY_REFERENCE,
@@ -705,14 +706,14 @@ const indeterminateFinding = (policy: FirewallPolicy): Finding | null => {
     order: policy.order,
     severity: 'medium',
     category: 'indeterminate',
-    title: 'Analyse indéterminée pour un objet dynamique',
-    detail: 'Le contenu de cet objet dépend d’une source externe ou dynamique et ne peut pas être comparé localement de façon fiable.',
+    title: tr('Analyse indéterminée pour un objet dynamique', 'Inconclusive analysis for a dynamic object'),
+    detail: tr('Le contenu de cet objet dépend d’une source externe ou dynamique et ne peut pas être comparé localement de façon fiable.', 'This object’s content depends on an external or dynamic source and cannot be reliably compared locally.'),
     evidence: policy.indeterminateCriteria,
     recommendation: {
-      summary: 'Valider le contenu actuel de l’objet dynamique sur le FortiGate avant de conclure à une couverture ou une équivalence.',
+      summary: tr('Valider le contenu actuel de l’objet dynamique sur le FortiGate avant de conclure à une couverture ou une équivalence.', 'Check the dynamic object’s current content on the FortiGate before concluding on coverage or equivalence.'),
       actions: [
-        'Vérifier la résolution effective de l’objet et sa fraîcheur sur l’équipement.',
-        'Comparer les règles avec les résultats Policy Match et les journaux avant toute remédiation.',
+        tr('Vérifier la résolution effective de l’objet et sa fraîcheur sur l’équipement.', 'Check how the object actually resolves on the device and how fresh it is.'),
+        tr('Comparer les règles avec les résultats Policy Match et les journaux avant toute remédiation.', 'Compare the rules with Policy Match results and logs before any remediation.'),
       ],
       reference: FORTINET_FIREWALL_POLICY_REFERENCE,
     },
@@ -739,21 +740,21 @@ const temporaryFinding = (policy: FirewallPolicy): Finding | null => {
     order: policy.order,
     severity: expired ? 'high' : 'medium',
     category: 'temporary',
-    title: expired ? 'Règle temporaire expirée' : 'Règle temporaire à encadrer',
+    title: expired ? tr('Règle temporaire expirée', 'Expired temporary rule') : tr('Règle temporaire à encadrer', 'Temporary rule to be governed'),
     detail: expired
-      ? `La règle temporaire a dépassé sa date d’expiration (${policy.expirationDate}).`
+      ? tr(`La règle temporaire a dépassé sa date d’expiration (${policy.expirationDate}).`, `The temporary rule is past its expiry date (${policy.expirationDate}).`)
       : missingDate
-        ? 'La règle est identifiée comme temporaire mais ne possède pas de date d’expiration exploitable.'
-        : `La règle temporaire expire le ${policy.expirationDate}.`,
+        ? tr('La règle est identifiée comme temporaire mais ne possède pas de date d’expiration exploitable.', 'The rule is marked as temporary but has no usable expiry date.')
+        : tr(`La règle temporaire expire le ${policy.expirationDate}.`, `The temporary rule expires on ${policy.expirationDate}.`),
     evidence: [
-      'Règle temporaire',
-      policy.expirationDate ? `Expiration : ${policy.expirationDate}` : 'Expiration absente',
+      tr('Règle temporaire', 'Temporary rule'),
+      policy.expirationDate ? tr(`Expiration : ${policy.expirationDate}`, `Expiry: ${policy.expirationDate}`) : tr('Expiration absente', 'No expiry date'),
     ],
     recommendation: {
-      summary: expired ? 'Désactiver ou renouveler explicitement la règle après validation du besoin.' : 'Associer une date d’expiration et un responsable à cette exception.',
+      summary: expired ? tr('Désactiver ou renouveler explicitement la règle après validation du besoin.', 'Disable the rule, or explicitly renew it once the need is confirmed.') : tr('Associer une date d’expiration et un responsable à cette exception.', 'Give this exception an expiry date and an owner.'),
       actions: [
-        'Confirmer le ticket et le propriétaire de l’exception.',
-        expired ? 'Désactiver la règle si le besoin n’est plus justifié.' : 'Planifier une revue avant l’expiration.',
+        tr('Confirmer le ticket et le propriétaire de l’exception.', 'Confirm the exception’s ticket and owner.'),
+        expired ? tr('Désactiver la règle si le besoin n’est plus justifié.', 'Disable the rule if the need is no longer justified.') : tr('Planifier une revue avant l’expiration.', 'Schedule a review before it expires.'),
       ],
       reference: FORTINET_FIREWALL_POLICY_REFERENCE,
     },
@@ -771,12 +772,12 @@ const governanceFinding = (policy: FirewallPolicy): Finding | null => {
     order: policy.order,
     severity: 'low',
     category: 'governance',
-    title: 'Métadonnées de gouvernance incomplètes',
-    detail: 'Le nom, le contexte ou la traçabilité de cette policy ne permet pas d’identifier clairement sa justification.',
+    title: tr('Métadonnées de gouvernance incomplètes', 'Incomplete governance metadata'),
+    detail: tr('Le nom, le contexte ou la traçabilité de cette policy ne permet pas d’identifier clairement sa justification.', 'This policy’s name, context or traceability does not clearly show why it exists.'),
     evidence: policy.governanceGaps,
     recommendation: {
-      summary: 'Documenter la policy avec un nom, un commentaire, un ticket et un propriétaire identifiables.',
-      actions: ['Compléter les métadonnées avant la prochaine revue de configuration.'],
+      summary: tr('Documenter la policy avec un nom, un commentaire, un ticket et un propriétaire identifiables.', 'Document the policy with an identifiable name, comment, ticket and owner.'),
+      actions: [tr('Compléter les métadonnées avant la prochaine revue de configuration.', 'Complete the metadata before the next configuration review.')],
       reference: FORTINET_FIREWALL_POLICY_REFERENCE,
     },
   }
@@ -798,12 +799,12 @@ const securityFinding = (policy: FirewallPolicy): Finding | null => {
     return {
       ...base,
       severity: 'high',
-      title: 'Profils de sécurité non identifiés',
-      detail: 'La policy indique que les profils UTM sont activés, mais aucun profil IPS, antivirus, Web ou applicatif n’a été identifié dans l’export.',
-      evidence: ['utm-status: enable', 'Aucun profil de sécurité référencé'],
+      title: tr('Profils de sécurité non identifiés', 'Security profiles not identified'),
+      detail: tr('La policy indique que les profils UTM sont activés, mais aucun profil IPS, antivirus, Web ou applicatif n’a été identifié dans l’export.', 'The policy states that UTM profiles are enabled, but no IPS, antivirus, web or application profile was found in the export.'),
+      evidence: ['utm-status: enable', tr('Aucun profil de sécurité référencé', 'No security profile referenced')],
       recommendation: {
-        summary: 'Vérifier les profils réellement associés à cette policy sur le FortiGate.',
-        actions: ['Contrôler IPS, antivirus, filtrage Web, contrôle applicatif et inspection SSL selon le flux.'],
+        summary: tr('Vérifier les profils réellement associés à cette policy sur le FortiGate.', 'Check which profiles are actually attached to this policy on the FortiGate.'),
+        actions: [tr('Contrôler IPS, antivirus, filtrage Web, contrôle applicatif et inspection SSL selon le flux.', 'Review IPS, antivirus, web filtering, application control and SSL inspection according to the flow.')],
         reference: FORTINET_FIREWALL_POLICY_REFERENCE,
       },
     }
@@ -814,14 +815,14 @@ const securityFinding = (policy: FirewallPolicy): Finding | null => {
     return {
       ...base,
       severity: 'medium',
-      title: 'Aucun profil de sécurité',
-      detail: 'Cette policy autorise le trafic sans profil antivirus, IPS, filtrage Web, contrôle applicatif ni filtrage DNS.',
-      evidence: ['Aucun profil de sécurité ni profile-group', `utm-status: ${policy.utmStatus}`],
+      title: tr('Aucun profil de sécurité', 'No security profile'),
+      detail: tr('Cette policy autorise le trafic sans profil antivirus, IPS, filtrage Web, contrôle applicatif ni filtrage DNS.', 'This policy allows traffic without any antivirus, IPS, web filtering, application control or DNS filtering profile.'),
+      evidence: [tr('Aucun profil de sécurité ni profile-group', 'No security profile or profile-group'), `utm-status: ${policy.utmStatus}`],
       recommendation: {
-        summary: 'Associer au minimum un profil IPS et, selon le flux, antivirus et filtrage Web.',
+        summary: tr('Associer au minimum un profil IPS et, selon le flux, antivirus et filtrage Web.', 'Attach at least an IPS profile and, depending on the flow, antivirus and web filtering.'),
         actions: [
-          'Identifier la nature du flux (sortant Internet, entrant, inter-zones internes).',
-          'Appliquer les profils adaptés ou documenter l’exception si le flux est interne et maîtrisé.',
+          tr('Identifier la nature du flux (sortant Internet, entrant, inter-zones internes).', 'Identify the type of flow (outbound to the Internet, inbound, between internal zones).'),
+          tr('Appliquer les profils adaptés ou documenter l’exception si le flux est interne et maîtrisé.', 'Apply suitable profiles, or document the exception if the flow is internal and controlled.'),
         ],
         cli: `config firewall policy\n    edit ${policy.id}\n        set utm-status enable\n        set ips-sensor "default"\n        set av-profile "default"\n        set ssl-ssh-profile "certificate-inspection"\n    next\nend`,
         reference: FORTINET_FIREWALL_POLICY_REFERENCE,
@@ -832,18 +833,18 @@ const securityFinding = (policy: FirewallPolicy): Finding | null => {
   const missing = [
     ['ips-sensor', 'IPS'],
     ['av-profile', 'antivirus'],
-    ['webfilter-profile', 'filtrage Web'],
+    ['webfilter-profile', tr('filtrage Web', 'web filtering')],
   ].filter(([key]) => !kinds.includes(key)).map(([, label]) => label)
   if (!missing.length) return null
   return {
     ...base,
     severity: 'low',
-    title: 'Profils de sécurité incomplets',
-    detail: `Cette policy applique des profils de sécurité mais n’a pas de profil : ${missing.join(', ')}.`,
-    evidence: [`Profils présents : ${kinds.join(', ') || 'aucun'}`, ...missing.map((label) => `Manquant : ${label}`)],
+    title: tr('Profils de sécurité incomplets', 'Incomplete security profiles'),
+    detail: tr(`Cette policy applique des profils de sécurité mais n’a pas de profil : ${missing.join(', ')}.`, `This policy applies security profiles but has no ${missing.join(', ')} profile.`),
+    evidence: [tr(`Profils présents : ${kinds.join(', ') || 'aucun'}`, `Profiles present: ${kinds.join(', ') || 'none'}`), ...missing.map((label) => tr(`Manquant : ${label}`, `Missing: ${label}`))],
     recommendation: {
-      summary: 'Vérifier que l’absence de ces profils est voulue pour ce flux.',
-      actions: ['Compléter les profils manquants ou documenter l’exception dans le commentaire de la policy.'],
+      summary: tr('Vérifier que l’absence de ces profils est voulue pour ce flux.', 'Check that the absence of these profiles is intended for this flow.'),
+      actions: [tr('Compléter les profils manquants ou documenter l’exception dans le commentaire de la policy.', 'Add the missing profiles, or document the exception in the policy comment.')],
       reference: FORTINET_FIREWALL_POLICY_REFERENCE,
     },
   }
@@ -860,12 +861,12 @@ const inspectionFinding = (policy: FirewallPolicy): Finding | null => {
     order: policy.order,
     severity: 'high',
     category: 'inspection',
-    title: 'Inspection SSL désactivée',
-    detail: 'Cette policy utilise no-inspection, ce qui réduit la visibilité et les contrôles sur les flux chiffrés.',
+    title: tr('Inspection SSL désactivée', 'SSL inspection disabled'),
+    detail: tr('Cette policy utilise no-inspection, ce qui réduit la visibilité et les contrôles sur les flux chiffrés.', 'This policy uses no-inspection, which reduces visibility and control over encrypted flows.'),
     evidence: ['ssl-ssh-profile: no-inspection'],
     recommendation: {
-      summary: 'Valider explicitement l’exception no-inspection pour ce flux sensible.',
-      actions: ['Utiliser le profil d’inspection SSL adapté lorsque les exigences de confidentialité et de conformité le permettent.'],
+      summary: tr('Valider explicitement l’exception no-inspection pour ce flux sensible.', 'Explicitly approve the no-inspection exception for this sensitive flow.'),
+      actions: [tr('Utiliser le profil d’inspection SSL adapté lorsque les exigences de confidentialité et de conformité le permettent.', 'Use the appropriate SSL inspection profile where privacy and compliance requirements allow.')],
       reference: FORTINET_FIREWALL_POLICY_REFERENCE,
     },
   }
@@ -908,7 +909,7 @@ const objectFindings = (configuration: string, policies: FirewallPolicy[]): Find
     const empty = Object.values(fields).every((values) => !values.length)
     const unused = !references.has(name.toLowerCase())
     if (!empty && !unused) return []
-    const reason = empty && unused ? 'Objet vide et non référencé' : empty ? 'Objet vide' : 'Objet non référencé par une policy active'
+    const reason = empty && unused ? tr('Objet vide et non référencé', 'Empty and unreferenced object') : empty ? tr('Objet vide', 'Empty object') : tr('Objet non référencé par une policy active', 'Object not referenced by any active policy')
     return [{
       id: `object-${kind}-${name}`,
       policyId: `object:${kind}:${name}`,
@@ -917,11 +918,11 @@ const objectFindings = (configuration: string, policies: FirewallPolicy[]): Find
       severity: empty ? 'medium' : 'low',
       category: 'object',
       title: reason,
-      detail: `L’objet ${kind} « ${name} » devrait être supprimé, complété ou rattaché à un besoin documenté.`,
-      evidence: [`Type : ${kind}`, reason],
+      detail: tr(`L’objet ${kind} « ${name} » devrait être supprimé, complété ou rattaché à un besoin documenté.`, `The ${kind} object “${name}” should be deleted, completed or tied to a documented need.`),
+      evidence: [tr(`Type : ${kind}`, `Type: ${kind}`), reason],
       recommendation: {
-        summary: 'Nettoyer les objets inutilisés et compléter les objets vides avant la prochaine revue.',
-        actions: ['Vérifier les références indirectes et l’inventaire avant suppression.'],
+        summary: tr('Nettoyer les objets inutilisés et compléter les objets vides avant la prochaine revue.', 'Clean up unused objects and complete empty ones before the next review.'),
+        actions: [tr('Vérifier les références indirectes et l’inventaire avant suppression.', 'Check indirect references and the inventory before deleting.')],
         reference: FORTINET_FIREWALL_POLICY_REFERENCE,
       },
     } satisfies Finding]
@@ -961,14 +962,14 @@ const duplicateObjectFindings = (configuration: string): Finding[] => {
         order: 0,
         severity: 'low',
         category: 'object',
-        title: 'Objet en doublon',
-        detail: `L’objet ${kind} « ${name} » a la même définition que « ${original} ».`,
-        evidence: [`Type : ${kind}`, `Définition identique à : ${original}`],
+        title: tr('Objet en doublon', 'Duplicate object'),
+        detail: tr(`L’objet ${kind} « ${name} » a la même définition que « ${original} ».`, `The ${kind} object “${name}” has the same definition as “${original}”.`),
+        evidence: [tr(`Type : ${kind}`, `Type: ${kind}`), tr(`Définition identique à : ${original}`, `Same definition as: ${original}`)],
         recommendation: {
-          summary: 'Consolider les objets identiques pour limiter les erreurs de maintenance.',
+          summary: tr('Consolider les objets identiques pour limiter les erreurs de maintenance.', 'Merge identical objects to reduce maintenance errors.'),
           actions: [
-            `Remplacer les références à « ${name} » par « ${original} » dans les policies et groupes.`,
-            'Supprimer le doublon une fois qu’il n’est plus référencé.',
+            tr(`Remplacer les références à « ${name} » par « ${original} » dans les policies et groupes.`, `Replace references to “${name}” with “${original}” in policies and groups.`),
+            tr('Supprimer le doublon une fois qu’il n’est plus référencé.', 'Delete the duplicate once it is no longer referenced.'),
           ],
           reference: FORTINET_FIREWALL_POLICY_REFERENCE,
         },
@@ -1060,14 +1061,14 @@ export const analyzePolicies = (
         order: policy.order,
         severity: 'medium',
         category: 'duplicate',
-        title: 'Règle dupliquée',
-        detail: `Le périmètre et l’action sont identiques à la règle #${duplicatePolicy.id} « ${duplicatePolicy.name} ».`,
-        evidence: [`Règle équivalente: #${duplicatePolicy.id}`, 'Critères de correspondance et action identiques'],
+        title: tr('Règle dupliquée', 'Duplicate rule'),
+        detail: tr(`Le périmètre et l’action sont identiques à la règle #${duplicatePolicy.id} « ${duplicatePolicy.name} ».`, `Scope and action are identical to rule #${duplicatePolicy.id} “${duplicatePolicy.name}”.`),
+        evidence: [tr(`Règle équivalente: #${duplicatePolicy.id}`, `Equivalent rule: #${duplicatePolicy.id}`), tr('Critères de correspondance et action identiques', 'Identical match criteria and action')],
         recommendation: {
-          summary: 'Consolider les règles équivalentes pour réduire la complexité et les erreurs de maintenance.',
+          summary: tr('Consolider les règles équivalentes pour réduire la complexité et les erreurs de maintenance.', 'Merge equivalent rules to reduce complexity and maintenance errors.'),
           actions: [
-            'Comparer les options annexes, les compteurs et les commentaires des deux règles.',
-            'Conserver la règle de référence puis désactiver le doublon pendant une période d’observation.',
+            tr('Comparer les options annexes, les compteurs et les commentaires des deux règles.', 'Compare the secondary options, counters and comments of both rules.'),
+            tr('Conserver la règle de référence puis désactiver le doublon pendant une période d’observation.', 'Keep the reference rule, then disable the duplicate for an observation period.'),
           ],
           cli: `config firewall policy\n    edit ${policy.id}\n        set status disable\n    next\nend`,
           reference: FORTINET_FIREWALL_POLICY_REFERENCE,
@@ -1090,20 +1091,26 @@ export const analyzePolicies = (
         order: policy.order,
         severity: 'high',
         category: 'shadowed',
-        title: 'Règle masquée par une règle précédente',
-        detail: `Le trafic correspondant est déjà ${shadowingPolicy.action === 'deny' ? 'refusé' : 'accepté'} par la règle #${shadowingPolicy.id} « ${shadowingPolicy.name} ».`,
+        title: tr('Règle masquée par une règle précédente', 'Rule shadowed by an earlier rule'),
+        detail: tr(
+          `Le trafic correspondant est déjà ${shadowingPolicy.action === 'deny' ? 'refusé' : 'accepté'} par la règle #${shadowingPolicy.id} « ${shadowingPolicy.name} ».`,
+          `Matching traffic is already ${shadowingPolicy.action === 'deny' ? 'denied' : 'accepted'} by rule #${shadowingPolicy.id} “${shadowingPolicy.name}”.`,
+        ),
         evidence: [
-          `Règle couvrante: #${shadowingPolicy.id}`,
-          `Position précédente: ${shadowingPolicy.order}`,
-          `Action couvrante : ${shadowingPolicy.action}`,
+          tr(`Règle couvrante: #${shadowingPolicy.id}`, `Covering rule: #${shadowingPolicy.id}`),
+          tr(`Position précédente: ${shadowingPolicy.order}`, `Earlier position: ${shadowingPolicy.order}`),
+          tr(`Action couvrante : ${shadowingPolicy.action}`, `Covering action: ${shadowingPolicy.action}`),
           ...coverageEvidence(shadowingPolicy, policy),
         ],
         recommendation: {
-          summary: `La règle #${shadowingPolicy.id} ${shadowingPolicy.action === 'deny' ? 'refuse' : 'couvre'} déjà ce trafic : confirmer l’intention avant toute modification.`,
+          summary: tr(
+            `La règle #${shadowingPolicy.id} ${shadowingPolicy.action === 'deny' ? 'refuse' : 'couvre'} déjà ce trafic : confirmer l’intention avant toute modification.`,
+            `Rule #${shadowingPolicy.id} already ${shadowingPolicy.action === 'deny' ? 'denies' : 'covers'} this traffic: confirm the intent before changing anything.`,
+          ),
           actions: [
-            'Comparer les compteurs de trafic et la date de dernière utilisation des deux règles.',
-            `Si la règle #${policy.id} est nécessaire, la déplacer avant la règle #${shadowingPolicy.id} puis tester le Policy Match.`,
-            'Sinon, désactiver la règle masquée pendant une période d’observation avant de la supprimer.',
+            tr('Comparer les compteurs de trafic et la date de dernière utilisation des deux règles.', 'Compare the traffic counters and last-use dates of both rules.'),
+            tr(`Si la règle #${policy.id} est nécessaire, la déplacer avant la règle #${shadowingPolicy.id} puis tester le Policy Match.`, `If rule #${policy.id} is needed, move it above rule #${shadowingPolicy.id}, then test with Policy Match.`),
+            tr('Sinon, désactiver la règle masquée pendant une période d’observation avant de la supprimer.', 'Otherwise, disable the shadowed rule for an observation period before deleting it.'),
           ],
           cli: `config firewall policy\n    edit ${policy.id}\n        set status disable\n    next\nend`,
           reference: FORTINET_FIREWALL_POLICY_REFERENCE,
@@ -1126,20 +1133,23 @@ export const analyzePolicies = (
           order: policy.order,
           severity: 'medium',
           category: 'overlap',
-          title: 'Chevauchement partiel, sans masquage complet',
-          detail: `Une partie du trafic correspond aussi à la règle #${overlappingPolicy.id} « ${overlappingPolicy.name} », mais la règle #${policy.id} n’est pas masquée : elle reste évaluée pour le trafic hors du périmètre commun.`,
+          title: tr('Chevauchement partiel, sans masquage complet', 'Partial overlap, not fully shadowed'),
+          detail: tr(
+            `Une partie du trafic correspond aussi à la règle #${overlappingPolicy.id} « ${overlappingPolicy.name} », mais la règle #${policy.id} n’est pas masquée : elle reste évaluée pour le trafic hors du périmètre commun.`,
+            `Part of the traffic also matches rule #${overlappingPolicy.id} “${overlappingPolicy.name}”, but rule #${policy.id} is not shadowed: it is still evaluated for traffic outside the shared scope.`,
+          ),
           evidence: [
-            `Règle en intersection: #${overlappingPolicy.id}`,
-            `Services en intersection : ${overlappingPolicy.service.join(', ')} avec ${policy.service.join(', ')}`,
-            `Sources en intersection : ${overlappingPolicy.srcaddr.join(', ')} avec ${policy.srcaddr.join(', ')}`,
-            `Destinations en intersection : ${overlappingPolicy.dstaddr.join(', ')} avec ${policy.dstaddr.join(', ')}`,
-            `La règle #${policy.id} reste applicable au trafic non couvert par la règle #${overlappingPolicy.id}`,
+            tr(`Règle en intersection: #${overlappingPolicy.id}`, `Overlapping rule: #${overlappingPolicy.id}`),
+            tr(`Services en intersection : ${overlappingPolicy.service.join(', ')} avec ${policy.service.join(', ')}`, `Overlapping services: ${overlappingPolicy.service.join(', ')} with ${policy.service.join(', ')}`),
+            tr(`Sources en intersection : ${overlappingPolicy.srcaddr.join(', ')} avec ${policy.srcaddr.join(', ')}`, `Overlapping sources: ${overlappingPolicy.srcaddr.join(', ')} with ${policy.srcaddr.join(', ')}`),
+            tr(`Destinations en intersection : ${overlappingPolicy.dstaddr.join(', ')} avec ${policy.dstaddr.join(', ')}`, `Overlapping destinations: ${overlappingPolicy.dstaddr.join(', ')} with ${policy.dstaddr.join(', ')}`),
+            tr(`La règle #${policy.id} reste applicable au trafic non couvert par la règle #${overlappingPolicy.id}`, `Rule #${policy.id} still applies to traffic not covered by rule #${overlappingPolicy.id}`),
           ],
           recommendation: {
-            summary: 'Clarifier les périmètres afin qu’un même flux ne dépende pas involontairement de l’ordre des règles.',
+            summary: tr('Clarifier les périmètres afin qu’un même flux ne dépende pas involontairement de l’ordre des règles.', 'Clarify the scopes so that a single flow does not accidentally depend on rule order.'),
             actions: [
-              'Identifier les adresses et services communs aux deux règles.',
-              'Scinder ou restreindre les objets concernés, puis valider avec Policy Match.',
+              tr('Identifier les adresses et services communs aux deux règles.', 'Identify the addresses and services shared by both rules.'),
+              tr('Scinder ou restreindre les objets concernés, puis valider avec Policy Match.', 'Split or narrow the objects involved, then validate with Policy Match.'),
             ],
             reference: FORTINET_FIREWALL_POLICY_REFERENCE,
           },
@@ -1159,14 +1169,14 @@ export const analyzePolicies = (
         order: policy.order,
         severity: 'medium',
         category: 'visibility',
-        title: 'Journalisation désactivée',
-        detail: 'Les flux acceptés par cette règle ne seront pas suffisamment visibles pendant l’audit.',
+        title: tr('Journalisation désactivée', 'Logging disabled'),
+        detail: tr('Les flux acceptés par cette règle ne seront pas suffisamment visibles pendant l’audit.', 'Flows accepted by this rule will not be visible enough during the audit.'),
         evidence: ['logtraffic: disable'],
         recommendation: {
-          summary: 'Conserver une trace des sessions acceptées afin de contrôler l’usage réel de la politique.',
+          summary: tr('Conserver une trace des sessions acceptées afin de contrôler l’usage réel de la politique.', 'Keep a record of accepted sessions so the policy’s real use can be checked.'),
           actions: [
-            'Activer la journalisation de toutes les sessions autorisées par cette règle.',
-            'Vérifier la destination des journaux et leur durée de conservation avant la mise en production.',
+            tr('Activer la journalisation de toutes les sessions autorisées par cette règle.', 'Enable logging for every session this rule allows.'),
+            tr('Vérifier la destination des journaux et leur durée de conservation avant la mise en production.', 'Check where logs are sent and how long they are kept before going live.'),
           ],
           cli: `config firewall policy\n    edit ${policy.id}\n        set logtraffic all\n    next\nend`,
           reference: FORTINET_FIREWALL_POLICY_REFERENCE,

@@ -68,6 +68,24 @@ Après chaque import, la note globale et les compteurs (jamais le contenu de la 
 
 L’analyse reste volontairement conservatrice pour les objets dynamiques et les fonctions NAT qui ne peuvent pas être résolues depuis la seule table de politiques.
 
+## Langue
+
+L'interface existe en français et en anglais. Les constats, les recommandations, les correspondances de conformité, les exports et le compte rendu de réunion sont aussi traduits. Au premier lancement, la langue suit celle du navigateur ; le bouton `EN` / `FR` de la barre supérieure la change et la mémorise.
+
+Changer de langue recharge la page. Le fichier en cours d'analyse est confié au `sessionStorage` de l'onglet le temps du rechargement, puis effacé dès qu'il est relu et réanalysé dans la nouvelle langue. Si le fichier est trop volumineux pour ce stockage, l'application prévient qu'il faudra le réimporter.
+
+Les identifiants des constats ne dépendent pas de la langue : les acquittements et le tableau de réunion restent valables d'une langue à l'autre. Les textes saisis par l'utilisateur (titre de réunion, notes, justifications) ne sont pas traduits.
+
+## Accessibilité
+
+L'application vise le niveau WCAG 2.2 AA :
+
+- **Clavier** : lien d'évitement vers le contenu, onglets au clavier (`←`/`→`, `Début`/`Fin`), raccourcis dans la liste des constats (`/`, `J`/`K`, `A`, `C`), déplacement des cartes de réunion avec `1` à `5` en alternative au glisser-déposer, décisions de séance au clavier (`S`/`M`/`C`/`R` en français, `D`/`M`/`K`/`P` en anglais). Les boîtes de dialogue sont modales et rendent le focus à l'élément d'origine.
+- **Lecteurs d'écran** : langue du document déclarée, repères (`main`, régions nommées), dialogues nommés par leur titre, zone `aria-live` qui annonce la fin d'une analyse, le nombre de constats après un filtre, le déplacement d'une carte et chaque décision de séance.
+- **Lisibilité** : contrastes d'au moins 4,5:1 en thème clair et sombre, mise en page sans défilement horizontal jusqu'à 320 px de large, animations coupées si le système demande de réduire les mouvements.
+
+L'audit a été fait avec axe-core (règles WCAG 2.0 à 2.2 A/AA et bonnes pratiques) sur chaque vue et chaque boîte de dialogue, dans les deux thèmes et les deux langues, sans violation restante, puis complété par un parcours au clavier. `src/presentation/accessibility.test.ts` protège ces corrections contre les régressions. Un test avec un vrai lecteur d'écran (NVDA, VoiceOver) reste recommandé avant une diffusion large.
+
 ## Vérification
 
 ```bash

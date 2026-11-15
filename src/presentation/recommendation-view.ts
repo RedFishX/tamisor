@@ -1,4 +1,5 @@
 import type { Finding, Recommendation } from '../domain/audit'
+import { tr } from '../i18n'
 import { complianceReferences, formatComplianceReference } from '../domain/compliance'
 
 const escapeHtml = (value: string): string =>
@@ -12,19 +13,19 @@ const escapeHtml = (value: string): string =>
 
 export const renderRecommendation = (recommendation: Recommendation): string => `
   <div class="recommendation">
-    <span>Plan de remédiation</span>
+    <span>${tr('Plan de remédiation', 'Remediation plan')}</span>
     <p>${escapeHtml(recommendation.summary)}</p>
     <ol>
       ${recommendation.actions.map((action) => `<li>${escapeHtml(action)}</li>`).join('')}
     </ol>
     ${recommendation.cli ? `
       <div class="cli-preview">
-        <div class="cli-header"><span>Exemple CLI à adapter</span><button class="copy-cli" type="button" data-copy-cli aria-keyshortcuts="C">Copier</button></div>
+        <div class="cli-header"><span>${tr('Exemple CLI à adapter', 'CLI example to adapt')}</span><button class="copy-cli" type="button" data-copy-cli aria-keyshortcuts="C">${tr('Copier', 'Copy')}</button></div>
         <pre><code>${escapeHtml(recommendation.cli)}</code></pre>
       </div>
     ` : ''}
     <a href="${escapeHtml(recommendation.reference.url)}" target="_blank" rel="noreferrer noopener">
-      ${escapeHtml(recommendation.reference.title)}
+      ${escapeHtml(recommendation.reference.title)}<span class="sr-only"> ${tr('(nouvel onglet)', '(opens in a new tab)')}</span>
     </a>
   </div>
 `
@@ -34,7 +35,7 @@ export const renderCompliance = (finding: Pick<Finding, 'category'>): string => 
   if (!references.length) return ''
   return `
   <div class="compliance">
-    <span>Référentiels concernés <small>(correspondance indicative)</small></span>
+    <span>${tr('Référentiels concernés', 'Related frameworks')} <small>${tr('(correspondance indicative)', '(indicative mapping)')}</small></span>
     <ul>
       ${references.map((reference) => `<li><strong>${escapeHtml(reference.framework)}</strong> ${escapeHtml(reference.control)} · ${escapeHtml(reference.title)}</li>`).join('')}
     </ul>
@@ -45,10 +46,10 @@ export const renderCompliance = (finding: Pick<Finding, 'category'>): string => 
 const csvCell = (value: string): string => `"${value.replace(/"/g, '""')}"`
 
 export const serializeFindingsCsv = (findings: Finding[]): string => {
-  const headers = [
-    'severite', 'type', 'regle', 'nom', 'constat', 'detail',
-    'recommandation', 'actions', 'cli', 'reference', 'conformite',
-  ]
+  const headers = tr(
+    'severite;type;regle;nom;constat;detail;recommandation;actions;cli;reference;conformite',
+    'severity;type;rule;name;finding;detail;recommendation;actions;cli;reference;compliance',
+  ).split(';')
   const rows = findings.map((finding) => [
     finding.severity,
     finding.category,

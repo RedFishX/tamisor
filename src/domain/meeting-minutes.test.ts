@@ -22,7 +22,7 @@ describe('renderMinutesMarkdown', () => {
   it('regroupe les policies par décision, décisions d’abord', () => {
     const markdown = renderMinutesMarkdown(board(), audit)
     expect(markdown).toContain('- Participants : Équipe réseau, RSSI')
-    expect(markdown).toContain('2 policy(s) inscrite(s) ; 1 à supprimer, 0 à modifier')
+    expect(markdown).toContain('2 policies inscrites ; 1 à supprimer, 0 à modifier, 0 conservée, 0 reportée, 1 non traitée.')
     expect(markdown.indexOf('## À supprimer (1)')).toBeLessThan(markdown.indexOf('## Non traitées (1)'))
     expect(markdown).toContain('### Règle #7 · Ancien_VPN (seq 2)')
     expect(markdown).toContain('- Justification : Tunnel décommissionné en septembre')

@@ -64,10 +64,10 @@ describe('renderMeetingFocus', () => {
     const html = focus('12')
     expect(html).toContain('Ordre du jour <span>1/2</span>')
     expect(html.indexOf('Proposé : supprimer')).toBeLessThan(html.indexOf('Proposé : modifier'))
-    expect(html).toMatch(/aria-label="Règle 7 [^"]*, décidée : supprimer"/)
-    expect(html).toMatch(/aria-current="step" aria-label="Règle 12 [^"]*, en cours"/)
-    expect(html).toContain('<span class="agenda-hits never">0</span>')
-    expect(html).toContain('<span class="agenda-hits high">15k</span>')
+    expect(html).toMatch(/aria-label="Règle 7 [^"]*, décidée : supprimer, 0 hit"/)
+    expect(html).toMatch(/aria-current="step" aria-label="Règle 12 [^"]*, en cours, 15\u202f230 hits"/)
+    expect(html).toContain('<span class="agenda-hits never" aria-hidden="true">0</span>')
+    expect(html).toContain('<span class="agenda-hits high" aria-hidden="true">15k</span>')
   })
 
   it('met en tête la proposition préparée, colorée, avec l’argument d’usage', () => {
