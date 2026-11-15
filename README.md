@@ -140,6 +140,30 @@ npm test
 npm run build
 ```
 
+## Éditions
+
+Tamisor suit un modèle « open core », comme Grafana ou GitLab : ce dépôt contient l’outil complet, et un service
+hébergé payant, développé à part, finance le projet.
+
+**Ce qui reste dans l’édition open source.** Tout ce dont a besoin une personne qui audite un pare-feu :
+analyse, constats et remédiations, mode réunion et compte rendu, exports (CSV, HTML, commandes CLI, SARIF, JSON),
+comparaison de configurations, historique local et commande CI. Auto-hébergée, elle n’a ni limite de taille de
+fichier propre à la démo, ni quota, ni fonction verrouillée.
+
+**Ce que le service hébergé ajoute.** Ce qu’il faut pour travailler en équipe ou sans rien installer :
+hébergement prêt à l’emploi, et des fonctions qui servent une organisation plutôt qu’un utilisateur seul,
+comme l’historique et les acquittements partagés, le suivi de plusieurs pare-feu dans le temps ou des rapports
+à la marque d’un cabinet. Ce code n’est pas publié ici.
+
+**Nos engagements.**
+
+- Une fonction publiée dans ce dépôt n’en est jamais retirée pour devenir payante.
+- Les limites de la démo en ligne (taille de fichier, nombre d’analyses par jour, fonctions réservées) ne
+  concernent que cette démo, jamais l’édition open source.
+- L’analyse se fait dans le navigateur dans les deux éditions : vos fichiers de configuration ne sont envoyés
+  à aucun serveur.
+- Les corrections et améliorations de l’analyseur sont publiées ici, pas réservées au service hébergé.
+
 ## Licence
 
 Tamisor est un logiciel libre distribué sous [GNU AGPL-3.0-or-later](LICENSE). Si vous proposez une version
