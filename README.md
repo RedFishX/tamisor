@@ -149,10 +149,3 @@ acceptées sous [CLA](CLA.md) (voir [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 L'outil aide à l'audit mais ne garantit pas l'exhaustivité des constats : il est fourni « en l'état », sans
 garantie (articles 15 et 16 de la licence).
-
-### Changement de nom
-
-Le projet s'appelait FortiScope. Au premier lancement, les préférences enregistrées sous l'ancien nom (thème,
-langue, acquittements, tableaux de réunion) sont reprises automatiquement ; l'historique des audits repart à
-zéro. Côté CI, le format JSON s'appelle désormais `shadowline-report`, les règles SARIF `shadowline/<catégorie>`
-et l'empreinte `shadowlineFindingId/v1` : régénérez la référence (`--baseline`) après la mise à jour.
