@@ -145,6 +145,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <button class="icon-button locale-toggle" id="locale-toggle" type="button" lang="${otherLocale}"
         aria-label="${otherLocale === 'en' ? 'Switch to English' : 'Passer en français'}" title="${otherLocale === 'en' ? 'Switch to English' : 'Passer en français'}">${otherLocale.toUpperCase()}</button>
       <button class="icon-button theme-toggle" id="theme-toggle" type="button"></button>
+      ${edition.toolbarItem?.render() ?? ''}
     </div>
     <input id="compare-input" type="file" accept=".conf,.txt,.csv,text/plain,text/csv" hidden />
     <input id="ack-import-input" type="file" accept=".json,application/json" hidden />

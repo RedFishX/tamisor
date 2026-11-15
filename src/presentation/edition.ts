@@ -65,6 +65,8 @@ export interface Edition {
   acceptAnalysis?(analysis: { name: string, policies: number, restored: boolean }, ui: EditionUi): boolean | Promise<boolean>
   /** Actions supplémentaires du menu « Exporter ». */
   exportActions?: readonly EditionAction[]
+  /** Élément ajouté à droite de la barre du haut, après le thème (HTML de confiance, produit par l'édition). */
+  toolbarItem?: { render(): string }
   /** Bandeau au-dessus des vues (HTML de confiance, produit par l'édition). */
   banner?: { label: string, render(): string }
 }
