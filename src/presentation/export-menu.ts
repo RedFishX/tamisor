@@ -6,7 +6,12 @@ export interface ExportMenuLock {
   badge(id: string): string
 }
 
-export const renderExportMenu = (auditReady: boolean, lock?: ExportMenuLock): string => {
+/** Entrée supplémentaire fournie par l'édition (libellés de confiance, échappés ici quand même). */
+export interface ExtraExport { id: string, label: string, hint: string }
+
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`)
+
+export const renderExportMenu = (auditReady: boolean, lock?: ExportMenuLock, extras: readonly ExtraExport[] = []): string => {
   const disabled = auditReady ? '' : ' disabled'
   const locked = (id: string) => lock?.isLocked(id) ? ' data-locked="true" aria-describedby="locked-feature-hint"' : ''
   const badge = (id: string) => lock?.badge(id) ?? ''
@@ -40,6 +45,9 @@ export const renderExportMenu = (auditReady: boolean, lock?: ExportMenuLock): st
         <button id="minutes-export-button" type="button"${disabled}${locked('minutes-export-button')}>
           <i data-lucide="presentation"></i><span><strong>${tr('Compte rendu de réunion', 'Meeting minutes')}</strong><small>${tr('Décisions par policy', 'Decisions per policy')}</small></span>${badge('minutes-export-button')}
         </button>
+        ${extras.map((extra) => `<button id="${escapeHtml(extra.id)}" type="button" data-edition-export${disabled}${locked(extra.id)}>
+          <i data-lucide="file-text"></i><span><strong>${escapeHtml(extra.label)}</strong><small>${escapeHtml(extra.hint)}</small></span>${badge(extra.id)}
+        </button>`).join('')}
       </div>
     </details>
   `

@@ -9,6 +9,8 @@
  * Sans édition enregistrée, l'application fonctionne sans aucune restriction (édition open source).
  */
 
+import type { AuditResult, Finding } from '../domain/audit'
+
 export interface DialogOptions {
   eyebrow: string
   title: string
@@ -27,6 +29,25 @@ export interface EditionUi {
   refreshBanner(): void
 }
 
+/** Audit affiché, mis à disposition des actions de l'édition (lecture seule). */
+export interface AuditContext {
+  audit: AuditResult
+  sourceName: string
+  /** Constat acquitté dans ce navigateur pour ce fichier source. */
+  isAcknowledged(sourceName: string, finding: Finding): boolean
+  /** Analyse un autre fichier avec le même moteur (Web Worker), sans l'afficher ni l'ajouter à l'historique. */
+  analyze(file: File): Promise<{ audit: AuditResult, importErrors: string[] }>
+}
+
+/** Entrée ajoutée au menu « Exporter », après les formats intégrés. Verrouillable par `lockedFeatures`. */
+export interface EditionAction {
+  /** Identifiant DOM du bouton. */
+  id: string
+  label: string
+  hint: string
+  run(context: AuditContext, ui: EditionUi): void | Promise<void>
+}
+
 export interface Edition {
   /** Identifiants DOM des boutons verrouillés : visibles, marqués de `lockedBadge`, leur action est remplacée par `onLockedFeature`. */
   lockedFeatures?: readonly string[]
@@ -42,6 +63,8 @@ export interface Edition {
   beforeAnalysis?(source: { name: string, lines: number }, ui: EditionUi): boolean | Promise<boolean>
   /** Après l'analyse, avant l'affichage. `false` : résultat écarté. `restored` : réanalyse après changement de langue. */
   acceptAnalysis?(analysis: { name: string, policies: number, restored: boolean }, ui: EditionUi): boolean | Promise<boolean>
+  /** Actions supplémentaires du menu « Exporter ». */
+  exportActions?: readonly EditionAction[]
   /** Bandeau au-dessus des vues (HTML de confiance, produit par l'édition). */
   banner?: { label: string, render(): string }
 }

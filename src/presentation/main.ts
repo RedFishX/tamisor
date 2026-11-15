@@ -64,7 +64,7 @@ import { usageBand, usageBandLabel, usageBands, type UsageBand } from '../domain
 import { categoryFilterLabel, categoryLabel, findingCategories, severityLabel } from '../domain/labels'
 import { formatDate, formatNumber, getLocale, localeStorageKey, plural, tr, type Locale } from '../i18n'
 import { APP_NAME, APP_SLUG, SOURCE_URL, storageKey } from '../brand'
-import { countLines, getEdition, isLocked, type DialogOptions, type EditionUi } from './edition'
+import { countLines, getEdition, isLocked, type AuditContext, type DialogOptions, type EditionUi } from './edition'
 
 const elementRiskLabel = (level: ElementRiskLevel): string => ({
   high: tr('Élevé', 'High'),
@@ -141,7 +141,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <button class="secondary-button" id="compare-button" type="button" disabled${lockedAttributes('compare-button')}>
         <i data-lucide="git-compare-arrows"></i> ${tr('Comparer', 'Compare')}${lockedBadge('compare-button')}
       </button>
-      ${renderExportMenu(false, { isLocked, badge: lockedBadge })}
+      ${renderExportMenu(false, { isLocked, badge: lockedBadge }, edition.exportActions)}
       <button class="icon-button locale-toggle" id="locale-toggle" type="button" lang="${otherLocale}"
         aria-label="${otherLocale === 'en' ? 'Switch to English' : 'Passer en français'}" title="${otherLocale === 'en' ? 'Switch to English' : 'Passer en français'}">${otherLocale.toUpperCase()}</button>
       <button class="icon-button theme-toggle" id="theme-toggle" type="button"></button>
@@ -448,6 +448,7 @@ const renderSource = () => {
   document.querySelector<HTMLButtonElement>('#json-export-button')!.disabled = !sourceName
   document.querySelector<HTMLButtonElement>('#ack-import-button')!.disabled = !sourceName
   document.querySelector<HTMLButtonElement>('#minutes-export-button')!.disabled = !sourceName || !meetingBoard.cards.length
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-edition-export]')) button.disabled = !sourceName
   if (!sourceName) {
     document.querySelector<HTMLDivElement>('#source-file')!.innerHTML = `
       <div class="source-icon" aria-hidden="true"><i data-lucide="file-search"></i></div>
@@ -728,10 +729,10 @@ const renderImportProgress = (message: string) => {
   feedback.innerHTML = `<div role="status">${escapeHtml(message)}</div>`
 }
 
-const analyzeWithWorker = (content: string, fileName: string): Promise<ImportedAuditResult> => new Promise((resolve, reject) => {
+const analyzeWithWorker = (content: string, fileName: string, onProgress: (message: string) => void = renderImportProgress): Promise<ImportedAuditResult> => new Promise((resolve, reject) => {
   const worker = new Worker(new URL('./audit.worker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (event: MessageEvent<{ type: string, message?: string, result?: ImportedAuditResult }>) => {
-    if (event.data.type === 'progress' && event.data.message) renderImportProgress(event.data.message)
+    if (event.data.type === 'progress' && event.data.message) onProgress(event.data.message)
     if (event.data.type === 'result' && event.data.result) {
       worker.terminate()
       resolve(event.data.result)
@@ -1031,6 +1032,23 @@ const downloadText = (content: string, fileName: string, type: string) => {
   link.download = fileName
   link.click()
   URL.revokeObjectURL(link.href)
+}
+
+const auditContext = (): AuditContext => ({
+  audit,
+  sourceName,
+  isAcknowledged: (name, finding) => acknowledged.has(acknowledgementKey(name, finding)),
+  analyze: async (file) => {
+    if (file.size > 10 * 1024 * 1024) throw new Error(tr(`${file.name} dépasse 10 Mo.`, `${file.name} is over 10 MB.`))
+    const { importErrors, ...result } = await analyzeWithWorker(await file.text(), file.name, () => undefined)
+    return { audit: result, importErrors }
+  },
+})
+for (const action of edition.exportActions ?? []) {
+  document.querySelector<HTMLButtonElement>(`#${CSS.escape(action.id)}`)?.addEventListener('click', () => {
+    document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
+    void action.run(auditContext(), editionUi)
+  })
 }
 
 document.querySelector<HTMLButtonElement>('#html-report-button')!.addEventListener('click', () => {
