@@ -64,7 +64,7 @@ import { usageBand, usageBandLabel, usageBands, type UsageBand } from '../domain
 import { categoryFilterLabel, categoryLabel, findingCategories, severityLabel } from '../domain/labels'
 import { formatDate, formatNumber, getLocale, localeStorageKey, plural, tr, type Locale } from '../i18n'
 import { APP_NAME, APP_SLUG, SOURCE_URL, storageKey } from '../brand'
-import { getEdition, isLocked, type DialogOptions, type EditionUi } from './edition'
+import { countLines, getEdition, isLocked, type DialogOptions, type EditionUi } from './edition'
 
 const elementRiskLabel = (level: ElementRiskLevel): string => ({
   high: tr('Élevé', 'High'),
@@ -788,7 +788,9 @@ const handleFile = async (file?: File) => {
     })
     return
   }
-  await loadConfiguration(await file.text(), file.name)
+  const content = await file.text()
+  if (edition.beforeAnalysis && !await edition.beforeAnalysis({ name: file.name, lines: countLines(content) }, editionUi)) return
+  await loadConfiguration(content, file.name)
 }
 
 document.querySelector<HTMLInputElement>('#file-input')!.addEventListener('change', (event) => {

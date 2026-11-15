@@ -38,6 +38,8 @@ export interface Edition {
   fileTypesHint?(): string
   /** Avant la lecture du fichier. `false` : import abandonné. */
   beforeImport?(file: { name: string, size: number }, ui: EditionUi): boolean | Promise<boolean>
+  /** Fichier lu en mémoire, avant l'analyse. `false` : import abandonné. */
+  beforeAnalysis?(source: { name: string, lines: number }, ui: EditionUi): boolean | Promise<boolean>
   /** Après l'analyse, avant l'affichage. `false` : résultat écarté. `restored` : réanalyse après changement de langue. */
   acceptAnalysis?(analysis: { name: string, policies: number, restored: boolean }, ui: EditionUi): boolean | Promise<boolean>
   /** Bandeau au-dessus des vues (HTML de confiance, produit par l'édition). */
@@ -49,3 +51,11 @@ let current: Edition = {}
 export const registerEdition = (edition: Edition): void => { current = edition }
 export const getEdition = (): Edition => current
 export const isLocked = (featureId: string): boolean => current.lockedFeatures?.includes(featureId) ?? false
+
+/** Nombre de lignes d'un texte (une dernière ligne sans saut de ligne compte). */
+export const countLines = (text: string): number => {
+  if (!text) return 0
+  let lines = 1
+  for (let index = text.indexOf('\n'); index !== -1; index = text.indexOf('\n', index + 1)) lines += 1
+  return text.endsWith('\n') ? lines - 1 : lines
+}
