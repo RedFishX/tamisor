@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 
 # ---- Construction : tests, typecheck, application web et commande CI ----
-FROM node:22-alpine AS build
+# Toujours sur l'architecture native du runner (BUILDPLATFORM) : le résultat est du JavaScript indépendant de la
+# plateforme, et émuler arm64 rend les tests de performance (analyse de 5 000 policies) trop lents.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
