@@ -203,7 +203,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div class="view-tabs" role="tablist" aria-label="${tr('Vues de l’audit', 'Audit views')}">
         <button type="button" role="tab" id="tab-overview" aria-controls="view-overview" data-view="overview">${tr('Vue d’ensemble', 'Overview')}</button>
         <button type="button" role="tab" id="tab-findings" aria-controls="view-findings" data-view="findings">${tr('Constats', 'Findings')} <span id="tab-findings-count"></span></button>
-        <button type="button" role="tab" id="tab-meeting" aria-controls="view-meeting" data-view="meeting">${tr('Réunion', 'Meeting')} <span id="tab-meeting-count"></span></button>
+        <button type="button" role="tab" id="tab-meeting" aria-controls="view-meeting" data-view="meeting"${lockedAttributes('tab-meeting')}>${tr('Réunion', 'Meeting')} <span id="tab-meeting-count"></span>${lockedBadge('tab-meeting')}</button>
       </div>
 
       ${edition.banner ? `<aside class="edition-banner" id="edition-banner" aria-label="${escapeHtml(edition.banner.label)}"></aside>` : ''}
@@ -587,7 +587,7 @@ const renderDetail = (finding: Finding | undefined) => {
         <i data-lucide="check"></i>${isAcknowledged ? tr('Restaurer le constat', 'Restore the finding') : tr('Acquitter le constat', 'Acknowledge the finding')}<kbd aria-hidden="true">A</kbd>
       </button>
       ${policy ? `<button class="policy-doc-button" type="button" data-policy-doc="${escapeHtml(finding.id)}"><i data-lucide="book-open"></i>${tr('Documentation Markdown', 'Markdown documentation')}</button>` : ''}
-      ${hasCard(meetingBoard, policyKey(finding))
+      ${viewAvailable('meeting') && hasCard(meetingBoard, policyKey(finding))
         ? `<button class="policy-doc-button" type="button" data-meeting-open="${escapeHtml(policyKey(finding))}"><i data-lucide="presentation"></i>${tr('Voir en réunion', 'View in meeting')}</button>`
         : ''}
     </div>
@@ -676,8 +676,11 @@ const renderOverviewPanel = () => {
 
 const viewFromHash = (): View | null => views.find((view) => viewHashes[view] === location.hash) ?? null
 
+/** Une vue verrouillée par l'édition (onglet `tab-<vue>`) n'est jamais affichée, même par le hash de l'URL. */
+const viewAvailable = (view: View) => !isLocked(`tab-${view}`)
+
 const setView = (view: View, updateHash = true) => {
-  activeView = sourceName ? view : 'findings'
+  activeView = sourceName && viewAvailable(view) ? view : 'findings'
   document.querySelector<HTMLElement>('.content')!.dataset.view = activeView
   document.querySelector<HTMLDivElement>('#view-overview')!.hidden = activeView !== 'overview'
   document.querySelector<HTMLDivElement>('#view-findings')!.hidden = activeView !== 'findings'
@@ -1223,7 +1226,7 @@ document.querySelector<HTMLElement>('.view-tabs')!.addEventListener('click', (ev
 document.querySelector<HTMLElement>('.view-tabs')!.addEventListener('keydown', (event) => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
   event.preventDefault()
-  const enabled = views.filter((view) => !document.querySelector<HTMLButtonElement>(`.view-tabs [data-view="${view}"]`)?.disabled)
+  const enabled = views.filter((view) => viewAvailable(view) && !document.querySelector<HTMLButtonElement>(`.view-tabs [data-view="${view}"]`)?.disabled)
   const index = enabled.indexOf(activeView)
   const next = event.key === 'Home' ? enabled[0]
     : event.key === 'End' ? enabled[enabled.length - 1]

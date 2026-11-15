@@ -722,6 +722,6 @@ button.metric.active strong { text-decoration: underline; text-decoration-thickn
   margin-left: auto; padding: 1px 6px; border: 1px solid var(--green); border-radius: var(--radius-badge);
   color: var(--green); font-size: var(--text-11); font-style: normal; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
 }
-#compare-button .locked-badge { margin-left: 6px; }
+#compare-button .locked-badge, .view-tabs .locked-badge { margin-left: 6px; }
 .export-options button[data-locked] { grid-template-columns: 28px 1fr auto; }
 @media (max-width: 560px) { #compare-button .locked-badge { display: none; } }
