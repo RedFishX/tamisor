@@ -3,14 +3,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setLocale } from '../i18n'
-import { run } from './fortiscope'
+import { run } from './shadowline'
 
 const fixture = new URL('../../test/multi-vdom-ipv6.conf', import.meta.url).pathname
 let directory: string
 let stdout: string
 
 beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), 'fortiscope-cli-'))
+  directory = mkdtempSync(join(tmpdir(), 'shadowline-cli-'))
   stdout = ''
   vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => { stdout += String(chunk); return true })
   vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
@@ -22,10 +22,10 @@ afterEach(() => {
   setLocale('fr')
 })
 
-describe('commande fortiscope', () => {
+describe('commande shadowline', () => {
   it('écrit les rapports et échoue (code 1) quand des constats dépassent le seuil', () => {
-    const sarif = join(directory, 'fortiscope.sarif')
-    const json = join(directory, 'fortiscope.json')
+    const sarif = join(directory, 'shadowline.sarif')
+    const json = join(directory, 'shadowline.json')
     expect(run([fixture, '--sarif', sarif, '--json', json, '--source-uri', 'campus/fw.conf'])).toBe(1)
     expect(JSON.parse(readFileSync(sarif, 'utf8')).runs[0].results.length).toBeGreaterThan(0)
     expect(JSON.parse(readFileSync(json, 'utf8')).source.file).toBe('campus/fw.conf')

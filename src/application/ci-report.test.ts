@@ -57,7 +57,7 @@ describe('rapport JSON', () => {
   it('décrit la source, le résumé, le seuil et chaque constat avec sa ligne', () => {
     const report = buildJsonReport(context({ baselineIds: new Set(['permissive-root-ipv4-10', 'disparu']) }))
     expect(report).toMatchObject({
-      format: 'fortiscope-report', version: 1, tool: { name: 'FortiScope', version: '1.2.0' }, source: { file: 'firewalls/fw-siege.conf' },
+      format: 'shadowline-report', version: 1, tool: { name: 'Shadowline', version: '1.2.0' }, source: { file: 'firewalls/fw-siege.conf' },
       summary: { activePolicies: 12, findings: 3, open: 3, bySeverity: { critical: 1, high: 1, medium: 1, low: 0 }, baseline: { new: 2, fixed: 1 }, gate: { blocking: 1, passed: false } },
     })
     expect(report.findings[0]).toMatchObject({ id: 'permissive-root-ipv4-10', status: 'open', baseline: 'unchanged', policy: { id: '10', line: 41 } })
@@ -84,7 +84,7 @@ describe('rapport SARIF', () => {
     const [first, , third] = buildSarifReport(context()).runs[0].results
     expect(first.locations[0].physicalLocation).toEqual({ artifactLocation: { uri: 'firewalls/fw-siege.conf', index: 0 }, region: { startLine: 41 } })
     expect(third.locations[0].physicalLocation).not.toHaveProperty('region')
-    expect(first.partialFingerprints).toEqual({ 'fortiscopeFindingId/v1': 'permissive-root-ipv4-10' })
+    expect(first.partialFingerprints).toEqual({ 'shadowlineFindingId/v1': 'permissive-root-ipv4-10' })
     expect(first.ruleIndex).toBe(0)
   })
 

@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-cli
+graft
+.git
+.github
+.claude
+*.local
+*.log
+/tests/fixtures/

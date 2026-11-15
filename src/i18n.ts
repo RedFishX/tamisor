@@ -12,7 +12,7 @@
 export type Locale = 'fr' | 'en'
 
 export const locales: Locale[] = ['fr', 'en']
-export const localeStorageKey = 'fortiscope-locale'
+export const localeStorageKey = 'shadowline-locale'
 
 export const isLocale = (value: unknown): value is Locale => value === 'fr' || value === 'en'
 

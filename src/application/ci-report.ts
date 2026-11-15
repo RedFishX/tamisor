@@ -5,11 +5,12 @@ import { calculateConfigurationScore } from '../domain/risk-score'
 import type { AcknowledgementRecord } from './finding-acknowledgement'
 import { acknowledgementKey } from './finding-acknowledgement'
 import { getLocale, tr } from '../i18n'
+import { APP_NAME, APP_SLUG, SOURCE_URL } from '../brand'
 
 /**
- * Rapports pour l'intégration continue : JSON (format propre à FortiScope, stable et versionné) et SARIF 2.1.0
+ * Rapports pour l'intégration continue : JSON (format propre à Shadowline, stable et versionné) et SARIF 2.1.0
  * (lu par GitHub code scanning, Azure DevOps, SonarQube, DefectDojo…). Fonctions pures, partagées par
- * l'export du navigateur et la commande `fortiscope` exécutée en CI.
+ * l'export du navigateur et la commande `shadowline` exécutée en CI.
  */
 
 export const severityOrder: Severity[] = ['critical', 'high', 'medium', 'low']
@@ -82,7 +83,7 @@ const countBy = <K extends string>(keys: K[], values: K[]): Record<K, number> =>
 
 /* ---------- JSON ---------- */
 
-export const JSON_REPORT_FORMAT = 'fortiscope-report'
+export const JSON_REPORT_FORMAT = `${APP_SLUG}-report`
 export const JSON_REPORT_VERSION = 1
 
 export const buildJsonReport = (context: ReportContext) => {
@@ -95,7 +96,7 @@ export const buildJsonReport = (context: ReportContext) => {
   return {
     format: JSON_REPORT_FORMAT,
     version: JSON_REPORT_VERSION,
-    tool: { name: 'FortiScope', version: context.toolVersion },
+    tool: { name: APP_NAME, version: context.toolVersion },
     generatedAt: context.generatedAt ?? new Date().toISOString(),
     locale: getLocale(),
     source: { file: context.sourceUri },
@@ -146,7 +147,7 @@ export const parseBaselineIds = (content: string): Set<string> => {
   const parsed: unknown = JSON.parse(content)
   const report = parsed as Partial<JsonReport> | null
   if (!report || report.format !== JSON_REPORT_FORMAT || !Array.isArray(report.findings)) {
-    throw new Error(tr('Référence invalide : un rapport JSON FortiScope est attendu.', 'Invalid baseline: a FortiScope JSON report is expected.'))
+    throw new Error(tr(`Référence invalide : un rapport JSON ${APP_NAME} est attendu.`, `Invalid baseline: a ${APP_NAME} JSON report is expected.`))
   }
   return new Set(report.findings.map((finding) => (finding as { id?: unknown }).id).filter((id): id is string => typeof id === 'string'))
 }
@@ -164,7 +165,7 @@ const ruleNames: Record<Finding['category'], string> = {
   inspection: 'SslInspectionDisabled', object: 'UnusedOrDuplicateObject',
 }
 
-export const ruleId = (category: Finding['category']): string => `fortiscope/${category}`
+export const ruleId = (category: Finding['category']): string => `${APP_SLUG}/${category}`
 
 export const buildSarifReport = (context: ReportContext) => {
   const reported = classifyFindings(context)
@@ -178,7 +179,8 @@ export const buildSarifReport = (context: ReportContext) => {
     runs: [{
       tool: {
         driver: {
-          name: 'FortiScope',
+          name: APP_NAME,
+          informationUri: SOURCE_URL,
           version: context.toolVersion,
           semanticVersion: context.toolVersion,
           rules: categories.map((category) => ({
@@ -217,7 +219,7 @@ export const buildSarifReport = (context: ReportContext) => {
           }],
         }],
         // Identifiant stable entre deux analyses : l'outil de CI suit un même constat d'un commit à l'autre.
-        partialFingerprints: { 'fortiscopeFindingId/v1': finding.id },
+        partialFingerprints: { [`${APP_SLUG}FindingId/v1`]: finding.id },
         ...(baseline ? { baselineState: baseline } : {}),
         ...(status === 'acknowledged' && acknowledgement ? {
           suppressions: [{ kind: 'external', status: 'accepted', justification: acknowledgement.justification }],
@@ -244,7 +246,7 @@ export const renderTextSummary = (context: ReportContext): string => {
   const gate = evaluateGate(reported, context.failOn)
   const counts = countBy(severityOrder, context.audit.findings.map((finding) => finding.severity))
   const lines = [
-    `FortiScope ${context.toolVersion} · ${context.sourceUri}`,
+    `${APP_NAME} ${context.toolVersion} · ${context.sourceUri}`,
     tr(
       `${context.audit.stats.activePolicies} policies actives, ${context.audit.findings.length} constats `
         + `(critiques ${counts.critical}, élevés ${counts.high}, moyens ${counts.medium}, faibles ${counts.low}), note ${calculateConfigurationScore(context.audit)}/100`,

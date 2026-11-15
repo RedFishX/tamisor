@@ -1,7 +1,7 @@
 /**
- * Commande `fortiscope` : audite un export FortiGate dans un pipeline de CI et produit des rapports JSON et SARIF.
+ * Commande `shadowline` : audite un export FortiGate dans un pipeline de CI et produit des rapports JSON et SARIF.
  *
- *   node fortiscope.mjs firewall.conf --sarif fortiscope.sarif --json fortiscope.json --fail-on high
+ *   node shadowline.mjs firewall.conf --sarif shadowline.sarif --json shadowline.json --fail-on high
  *
  * Codes de sortie : 0 = seuil respecté, 1 = constats bloquants, 2 = erreur d'utilisation ou d'import.
  * Toute l'analyse est locale, comme dans l'application : aucun appel réseau.
@@ -20,11 +20,11 @@ import {
   type FailOn, type ReportContext,
 } from '../application/ci-report'
 
-const help = (): string => tr(`Usage : fortiscope <fichier.conf|.txt|.csv> [options]
+const help = (): string => tr(`Usage : shadowline <fichier.conf|.txt|.csv> [options]
 
 Options :
   --sarif <fichier>             Écrit un rapport SARIF 2.1.0 (« - » pour la sortie standard)
-  --json <fichier>              Écrit un rapport JSON FortiScope (« - » pour la sortie standard)
+  --json <fichier>              Écrit un rapport JSON Shadowline (« - » pour la sortie standard)
   --fail-on <sévérité>          critical | high | medium | low | none (défaut : high)
   --acknowledgements <fichier>  Acquittements JSON exportés depuis l'application : ces constats ne bloquent pas
   --baseline <fichier>          Rapport JSON de la branche cible : seuls les nouveaux constats bloquent
@@ -34,11 +34,11 @@ Options :
   -v, --version                 Affiche la version
 
 Codes de sortie : 0 seuil respecté, 1 constats bloquants, 2 erreur d'utilisation ou d'import.`,
-`Usage: fortiscope <file.conf|.txt|.csv> [options]
+`Usage: shadowline <file.conf|.txt|.csv> [options]
 
 Options:
   --sarif <file>                Write a SARIF 2.1.0 report ("-" for standard output)
-  --json <file>                 Write a FortiScope JSON report ("-" for standard output)
+  --json <file>                 Write a Shadowline JSON report ("-" for standard output)
   --fail-on <severity>          critical | high | medium | low | none (default: high)
   --acknowledgements <file>     Acknowledgements JSON exported from the app: these findings do not block
   --baseline <file>             JSON report of the target branch: only new findings block
@@ -122,13 +122,13 @@ export const run = (argv: string[]): number => {
   return evaluateGate(classifyFindings(context), failOn).passed ? 0 : 1
 }
 
-const isEntryPoint = typeof process.argv[1] === 'string' && /fortiscope\.(m?js|ts)$/.test(process.argv[1])
+const isEntryPoint = typeof process.argv[1] === 'string' && /shadowline\.(m?js|ts)$/.test(process.argv[1])
 if (isEntryPoint) {
   try {
     process.exitCode = run(process.argv.slice(2))
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    process.stderr.write(`fortiscope: ${message}\n${error instanceof UsageError || (error as { code?: string }).code?.startsWith('ERR_PARSE_ARGS') ? `\n${help()}\n` : ''}`)
+    process.stderr.write(`shadowline: ${message}\n${error instanceof UsageError || (error as { code?: string }).code?.startsWith('ERR_PARSE_ARGS') ? `\n${help()}\n` : ''}`)
     process.exitCode = 2
   }
 }

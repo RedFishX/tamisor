@@ -1,6 +1,6 @@
 import type { HistoryEntry, HistoryStore } from '../application/audit-history'
 
-const DATABASE = 'fortiscope'
+const DATABASE = 'shadowline'
 const STORE = 'audit-history'
 
 const request = <T>(operation: IDBRequest<T>): Promise<T> => new Promise((resolve, reject) => {

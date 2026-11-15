@@ -1,18 +1,18 @@
-# Audit FortiScope à chaque merge request (GitLab CI).
+# Audit Shadowline à chaque merge request (GitLab CI).
 #
 # Prérequis dans le dépôt des configurations :
-#   - tools/fortiscope.mjs : la commande construite par `npm run build:cli` dans le dépôt FortiScope
+#   - tools/shadowline.mjs : la commande construite par `npm run build:cli` dans le dépôt Shadowline
 #     (un seul fichier, sans dépendance ; Node 20 ou plus suffit) ;
-#   - optionnel : acquittements-fortiscope.json, exporté depuis l'application (menu Exporter).
+#   - optionnel : acquittements-shadowline.json, exporté depuis l'application (menu Exporter).
 #
 # La référence est recalculée à partir de la branche cible : seuls les constats introduits
 # par la merge request font échouer le job.
 
 variables:
-  FORTISCOPE_CONFIG: "firewalls/fw-siege.conf"
-  FORTISCOPE_FAIL_ON: "high"   # critical | high | medium | low | none
+  SHADOWLINE_CONFIG: "firewalls/fw-siege.conf"
+  SHADOWLINE_FAIL_ON: "high"   # critical | high | medium | low | none
 
-fortiscope:
+shadowline:
   stage: test
   image: node:22-alpine
   rules:
@@ -21,7 +21,7 @@ fortiscope:
         - firewalls/**/*
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       variables:
-        FORTISCOPE_FAIL_ON: "none"   # branche principale : rapports seulement, sans bloquer
+        SHADOWLINE_FAIL_ON: "none"   # branche principale : rapports seulement, sans bloquer
   before_script:
     - apk add --no-cache git
   script:
@@ -29,20 +29,20 @@ fortiscope:
       BASELINE_ARGS=""
       if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
         git fetch --depth=1 origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-        if git show "FETCH_HEAD:$FORTISCOPE_CONFIG" > /tmp/target.conf 2>/dev/null; then
-          node tools/fortiscope.mjs /tmp/target.conf --source-uri "$FORTISCOPE_CONFIG" --json baseline.json --fail-on none > /dev/null
+        if git show "FETCH_HEAD:$SHADOWLINE_CONFIG" > /tmp/target.conf 2>/dev/null; then
+          node tools/shadowline.mjs /tmp/target.conf --source-uri "$SHADOWLINE_CONFIG" --json baseline.json --fail-on none > /dev/null
           BASELINE_ARGS="--baseline baseline.json"
         fi
       fi
       ACK_ARGS=""
-      [ -f acquittements-fortiscope.json ] && ACK_ARGS="--acknowledgements acquittements-fortiscope.json"
-      node tools/fortiscope.mjs "$FORTISCOPE_CONFIG" \
-        --sarif fortiscope.sarif --json fortiscope.json \
-        --fail-on "$FORTISCOPE_FAIL_ON" $BASELINE_ARGS $ACK_ARGS
+      [ -f acquittements-shadowline.json ] && ACK_ARGS="--acknowledgements acquittements-shadowline.json"
+      node tools/shadowline.mjs "$SHADOWLINE_CONFIG" \
+        --sarif shadowline.sarif --json shadowline.json \
+        --fail-on "$SHADOWLINE_FAIL_ON" $BASELINE_ARGS $ACK_ARGS
   artifacts:
     when: always
-    expose_as: "Audit FortiScope"
+    expose_as: "Audit Shadowline"
     paths:
-      - fortiscope.json
-      - fortiscope.sarif
+      - shadowline.json
+      - shadowline.sarif
     expire_in: 30 days

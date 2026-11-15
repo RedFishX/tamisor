@@ -63,6 +63,8 @@ import packageJson from '../../package.json'
 import { usageBand, usageBandLabel, usageBands, type UsageBand } from '../domain/policy-usage'
 import { categoryFilterLabel, categoryLabel, findingCategories, severityLabel } from '../domain/labels'
 import { formatDate, formatNumber, getLocale, localeStorageKey, plural, tr, type Locale } from '../i18n'
+import { APP_NAME, APP_SLUG, SOURCE_URL, storageKey } from '../brand'
+import { getEdition, isLocked, type DialogOptions, type EditionUi } from './edition'
 
 const elementRiskLabel = (level: ElementRiskLevel): string => ({
   high: tr('Élevé', 'High'),
@@ -72,7 +74,11 @@ const elementRiskLabel = (level: ElementRiskLevel): string => ({
 
 const otherLocale: Locale = getLocale() === 'fr' ? 'en' : 'fr'
 document.documentElement.lang = getLocale()
-document.title = tr('FortiScope · Audit de politiques FortiGate', 'FortiScope · FortiGate policy audit')
+const edition = getEdition()
+const lockedAttributes = (id: string) => isLocked(id) ? ' data-locked="true" aria-describedby="locked-feature-hint"' : ''
+const lockedBadge = (id: string) => isLocked(id) ? `<em class="locked-badge">${edition.lockedBadge ?? ''}</em>` : ''
+
+document.title = tr(`${APP_NAME} · Audit de politiques FortiGate`, `${APP_NAME} · FortiGate policy audit`)
 
 let audit: AuditResult = emptyAudit()
 let sourceName = ''
@@ -97,8 +103,8 @@ let historyStore: HistoryStore | null = null
 let historyEntries: HistoryEntry[] = []
 let historyUnavailable = false
 try { historyStore = createIndexedDbHistoryStore() } catch { historyUnavailable = true }
-let acknowledged = new Set<string>(JSON.parse(localStorage.getItem('fortiscope-acknowledged') ?? '[]'))
-let acknowledgementMetadata = new Map<string, AcknowledgementRecord>(Object.entries(JSON.parse(localStorage.getItem('fortiscope-acknowledgement-meta') ?? '{}')) as Array<[string, AcknowledgementRecord]>)
+let acknowledged = new Set<string>(JSON.parse(localStorage.getItem(storageKey('acknowledged')) ?? '[]'))
+let acknowledgementMetadata = new Map<string, AcknowledgementRecord>(Object.entries(JSON.parse(localStorage.getItem(storageKey('acknowledgement-meta')) ?? '{}')) as Array<[string, AcknowledgementRecord]>)
 let pendingAcknowledgement: { key: string, finding: Finding } | null = null
 const meetingStore = createMeetingStore(localStorage)
 let meetingBoard: MeetingBoard = createBoard('')
@@ -108,7 +114,7 @@ let focusKey: string | null = null
 /** Groupes de « À discuter » repliés (état d'affichage, non persistant). */
 const collapsedGroups = new Set<string>()
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)')
-const storedTheme = localStorage.getItem('fortiscope-theme') as ThemePreference | null
+const storedTheme = localStorage.getItem(storageKey('theme')) as ThemePreference | null
 let resolvedTheme: ResolvedTheme = resolveTheme(storedTheme ?? 'system', systemTheme.matches)
 document.documentElement.dataset.theme = resolvedTheme
 
@@ -127,15 +133,15 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <button class="icon-button sidebar-toggle" id="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="${tr('Afficher la source et l’historique', 'Show source and history')}" title="${tr('Source et historique', 'Source and history')}">
       <i data-lucide="panel-left"></i>
     </button>
-    <a class="brand" href="#" aria-label="${tr('FortiScope - accueil', 'FortiScope - home')}">
+    <a class="brand" href="#" aria-label="${tr(`${APP_NAME} - accueil`, `${APP_NAME} - home`)}">
       <span class="brand-mark" aria-hidden="true"><i data-lucide="shield-check"></i></span>
-      <span>Forti<span>Scope</span></span>
+      <span>Shadow<span>line</span></span>
     </a>
     <div class="topbar-actions">
-      <button class="secondary-button" id="compare-button" type="button" disabled>
-        <i data-lucide="git-compare-arrows"></i> ${tr('Comparer', 'Compare')}
+      <button class="secondary-button" id="compare-button" type="button" disabled${lockedAttributes('compare-button')}>
+        <i data-lucide="git-compare-arrows"></i> ${tr('Comparer', 'Compare')}${lockedBadge('compare-button')}
       </button>
-      ${renderExportMenu(false)}
+      ${renderExportMenu(false, { isLocked, badge: lockedBadge })}
       <button class="icon-button locale-toggle" id="locale-toggle" type="button" lang="${otherLocale}"
         aria-label="${otherLocale === 'en' ? 'Switch to English' : 'Passer en français'}" title="${otherLocale === 'en' ? 'Switch to English' : 'Passer en français'}">${otherLocale.toUpperCase()}</button>
       <button class="icon-button theme-toggle" id="theme-toggle" type="button"></button>
@@ -152,7 +158,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <span class="dropzone-icon" aria-hidden="true"><i data-lucide="upload"></i></span>
           <strong>${tr('Déposez votre export FortiGate', 'Drop your FortiGate export')}</strong>
           <small>${tr('ou cliquez pour choisir un fichier', 'or click to choose a file')}</small>
-          <span class="file-types" id="file-types">.conf · .txt · .csv · ${tr('10 Mo max.', '10 MB max.')}</span>
+          <span class="file-types" id="file-types">.conf · .txt · .csv · ${edition.fileTypesHint?.() ?? tr('10 Mo max.', '10 MB max.')}</span>
         </button>
         <input id="file-input" type="file" accept=".conf,.txt,.csv,text/plain,text/csv" hidden />
       </div>
@@ -174,6 +180,14 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           'Dynamic objects, nested IPv6 prefixes and the content of objects referenced only by a CSV are not resolved. Named schedules are compared by name.',
         )}</p>
       </details>
+
+      <footer class="sidebar-footer">
+        <p>${tr(
+          'Outil indépendant pour FortiGate®, non affilié à Fortinet, Inc. FortiGate et FortiOS sont des marques de Fortinet.',
+          'Independent tool for FortiGate®, not affiliated with Fortinet, Inc. FortiGate and FortiOS are trademarks of Fortinet.',
+        )}</p>
+        <a href="${SOURCE_URL}" target="_blank" rel="noopener noreferrer">${tr('Code source (AGPL-3.0)', 'Source code (AGPL-3.0)')}</a>
+      </footer>
     </aside>
     <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
 
@@ -192,6 +206,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <button type="button" role="tab" id="tab-meeting" aria-controls="view-meeting" data-view="meeting">${tr('Réunion', 'Meeting')} <span id="tab-meeting-count"></span></button>
       </div>
 
+      ${edition.banner ? `<aside class="edition-banner" id="edition-banner" aria-label="${escapeHtml(edition.banner.label)}"></aside>` : ''}
+      ${edition.lockedDescription ? `<p class="sr-only" id="locked-feature-hint">${escapeHtml(edition.lockedDescription)}</p>` : ''}
       <div class="import-feedback" id="import-feedback" role="alert" hidden></div>
       <div class="comparison-summary" id="comparison-summary" role="status" hidden></div>
 
@@ -297,18 +313,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </dialog>
 `
 
-interface ConfirmationOptions {
-  eyebrow: string
-  title: string
-  message: string
-  confirmLabel: string
-  /** `null` : simple information, sans bouton d'annulation. */
-  cancelLabel?: string | null
-  tone?: 'danger' | 'neutral'
-}
-
 /** Remplace `window.confirm`/`window.alert` par une boîte de dialogue aux couleurs de l'application. */
-const askConfirmation = (options: ConfirmationOptions): Promise<boolean> => new Promise((resolve) => {
+const askConfirmation = (options: DialogOptions): Promise<boolean> => new Promise((resolve) => {
   const dialog = document.querySelector<HTMLDialogElement>('#confirm-dialog')!
   const cancel = document.querySelector<HTMLButtonElement>('#confirm-cancel')!
   const accept = document.querySelector<HTMLButtonElement>('#confirm-accept')!
@@ -325,6 +331,13 @@ const askConfirmation = (options: ConfirmationOptions): Promise<boolean> => new 
   // Action destructrice : le focus initial reste sur « Annuler ».
   ;(options.tone === 'danger' && !cancel.hidden ? cancel : accept).focus()
 })
+
+const renderEditionBanner = () => {
+  const banner = document.querySelector<HTMLElement>('#edition-banner')
+  if (banner && edition.banner) banner.innerHTML = edition.banner.render()
+}
+
+const editionUi: EditionUi = { confirm: askConfirmation, refreshBanner: renderEditionBanner }
 
 const renderIcons = () => createIcons({
   icons: { AlertTriangle, BookOpen, Braces, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Download, FileCode, FileSearch, FileText, Filter, GitCompareArrows, Info, Moon, PanelLeft, Plus, Presentation, Search, ShieldCheck, Square, SquareTerminal, Sun, TableProperties, Upload, X },
@@ -737,6 +750,11 @@ const loadConfiguration = async (content: string, name: string, options: { resto
   if (!nextAudit.policies.length) {
     return
   }
+  if (edition.acceptAnalysis && !await edition.acceptAnalysis({ name, policies: nextAudit.policies.length, restored: Boolean(options.restored) }, editionUi)) {
+    document.querySelector<HTMLDivElement>('#import-feedback')!.hidden = !nextAudit.importErrors.length
+    return
+  }
+  renderEditionBanner()
   lastImport = { content, name }
   audit = nextAudit
   sourceName = name
@@ -755,6 +773,7 @@ const loadConfiguration = async (content: string, name: string, options: { resto
 
 const handleFile = async (file?: File) => {
   if (!file) return
+  if (edition.beforeImport && !await edition.beforeImport({ name: file.name, size: file.size }, editionUi)) return
   if (file.size > 10 * 1024 * 1024) {
     const size = (file.size / 1024 / 1024).toLocaleString(getLocale() === 'en' ? 'en-GB' : 'fr-FR', { maximumFractionDigits: 1 })
     void askConfirmation({
@@ -793,7 +812,7 @@ document.querySelector<HTMLButtonElement>('#history-clear')!.addEventListener('c
 document.querySelector<HTMLButtonElement>('#theme-toggle')!.addEventListener('click', () => {
   resolvedTheme = toggleTheme(resolvedTheme)
   document.documentElement.dataset.theme = resolvedTheme
-  localStorage.setItem('fortiscope-theme', resolvedTheme)
+  localStorage.setItem(storageKey('theme'), resolvedTheme)
   renderThemeToggle()
 })
 document.querySelector<HTMLButtonElement>('#compare-button')!.addEventListener('click', () => document.querySelector<HTMLInputElement>('#compare-input')!.click())
@@ -927,8 +946,8 @@ document.querySelector<HTMLElement>('#finding-detail')!.addEventListener('click'
     acknowledgementMetadata.delete(key)
   }
   acknowledged = toggleAcknowledgement(acknowledged, key)
-  localStorage.setItem('fortiscope-acknowledged', JSON.stringify([...acknowledged]))
-  localStorage.setItem('fortiscope-acknowledgement-meta', JSON.stringify(Object.fromEntries(acknowledgementMetadata)))
+  localStorage.setItem(storageKey('acknowledged'), JSON.stringify([...acknowledged]))
+  localStorage.setItem(storageKey('acknowledgement-meta'), JSON.stringify(Object.fromEntries(acknowledgementMetadata)))
   refreshFindingsView()
 })
 
@@ -962,8 +981,8 @@ document.querySelector<HTMLFormElement>('#acknowledgement-form')!.addEventListen
   const previousIndex = previousList.findIndex((finding) => finding.id === selectedFindingId)
   acknowledgementMetadata.set(key, { key, justification, reviewDate, acknowledgedAt: new Date().toISOString() })
   acknowledged = toggleAcknowledgement(acknowledged, key)
-  localStorage.setItem('fortiscope-acknowledged', JSON.stringify([...acknowledged]))
-  localStorage.setItem('fortiscope-acknowledgement-meta', JSON.stringify(Object.fromEntries(acknowledgementMetadata)))
+  localStorage.setItem(storageKey('acknowledged'), JSON.stringify([...acknowledged]))
+  localStorage.setItem(storageKey('acknowledgement-meta'), JSON.stringify(Object.fromEntries(acknowledgementMetadata)))
   closeAcknowledgementDialog()
   const nextList = filteredFindings()
   if (!nextList.some((finding) => finding.id === selectedFindingId) && nextList.length) {
@@ -1010,7 +1029,7 @@ const downloadText = (content: string, fileName: string, type: string) => {
 }
 
 document.querySelector<HTMLButtonElement>('#html-report-button')!.addEventListener('click', () => {
-  downloadText(renderHtmlReport(audit, sourceName), tr('rapport-fortiscope.html', 'fortiscope-report.html'), 'text/html;charset=utf-8')
+  downloadText(renderHtmlReport(audit, sourceName), tr(`rapport-${APP_SLUG}.html`, `${APP_SLUG}-report.html`), 'text/html;charset=utf-8')
   document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
 })
 document.querySelector<HTMLButtonElement>('#cli-export-button')!.addEventListener('click', () => {
@@ -1025,17 +1044,17 @@ const ciReportContext = (): ReportContext => ({
   locate: lastImport ? createConfigLocator(lastImport.content, lastImport.name) : undefined,
   acknowledgements: [...acknowledgementMetadata.values()],
 })
-const reportBaseName = () => sourceName.replace(/\.[^.]+$/, '') || 'fortiscope'
+const reportBaseName = () => sourceName.replace(/\.[^.]+$/, '') || APP_SLUG
 document.querySelector<HTMLButtonElement>('#sarif-export-button')!.addEventListener('click', () => {
   downloadText(JSON.stringify(buildSarifReport(ciReportContext()), null, 2), `${reportBaseName()}.sarif`, 'application/sarif+json;charset=utf-8')
   document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
 })
 document.querySelector<HTMLButtonElement>('#json-export-button')!.addEventListener('click', () => {
-  downloadText(JSON.stringify(buildJsonReport(ciReportContext()), null, 2), `${reportBaseName()}.fortiscope.json`, 'application/json;charset=utf-8')
+  downloadText(JSON.stringify(buildJsonReport(ciReportContext()), null, 2), `${reportBaseName()}.${APP_SLUG}.json`, 'application/json;charset=utf-8')
   document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
 })
 document.querySelector<HTMLButtonElement>('#ack-export-button')!.addEventListener('click', () => {
-  downloadText(serializeAcknowledgements([...acknowledgementMetadata.values()]), tr('acquittements-fortiscope.json', 'fortiscope-acknowledgements.json'), 'application/json;charset=utf-8')
+  downloadText(serializeAcknowledgements([...acknowledgementMetadata.values()]), tr(`acquittements-${APP_SLUG}.json`, `${APP_SLUG}-acknowledgements.json`), 'application/json;charset=utf-8')
   document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
 })
 document.querySelector<HTMLButtonElement>('#ack-import-button')!.addEventListener('click', () => document.querySelector<HTMLInputElement>('#ack-import-input')!.click())
@@ -1049,8 +1068,8 @@ document.querySelector<HTMLInputElement>('#ack-import-input')!.addEventListener(
         acknowledgementMetadata.set(record.key, record)
         acknowledged.add(record.key)
       }
-      localStorage.setItem('fortiscope-acknowledged', JSON.stringify([...acknowledged]))
-      localStorage.setItem('fortiscope-acknowledgement-meta', JSON.stringify(Object.fromEntries(acknowledgementMetadata)))
+      localStorage.setItem(storageKey('acknowledged'), JSON.stringify([...acknowledged]))
+      localStorage.setItem(storageKey('acknowledgement-meta'), JSON.stringify(Object.fromEntries(acknowledgementMetadata)))
       refreshFindingsView()
     } catch {
       renderImportErrors([tr('Fichier d’acquittements invalide.', 'Invalid acknowledgements file.')])
@@ -1584,7 +1603,7 @@ document.querySelector<HTMLButtonElement>('#download-minutes-html')!.addEventLis
 
 /* ---------- Langue ---------- */
 /** Fichier en attente de réanalyse après un changement de langue (lu puis effacé aussitôt). */
-const pendingImportKey = 'fortiscope-pending-import'
+const pendingImportKey = storageKey('pending-import')
 
 document.querySelector<HTMLButtonElement>('#locale-toggle')!.addEventListener('click', async () => {
   // La langue est fixée au chargement : la changer recharge la page. Le fichier analysé est confié à
@@ -1608,7 +1627,21 @@ document.querySelector<HTMLButtonElement>('#locale-toggle')!.addEventListener('c
   location.reload()
 })
 
+// Fonctions verrouillées par l'édition : visibles, mais leur action est remplacée. Écouteur en capture pour
+// passer avant l'action d'origine ; un bouton activé au clavier déclenche aussi `click`.
+if (edition.lockedFeatures?.length) {
+  document.addEventListener('click', (event) => {
+    const locked = (event.target as Element | null)?.closest<HTMLElement>('[data-locked]')
+    if (!locked || (locked as HTMLButtonElement).disabled) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    document.querySelector<HTMLDetailsElement>('#export-menu')?.removeAttribute('open')
+    edition.onLockedFeature?.(locked.id, editionUi)
+  }, { capture: true })
+}
+
 renderAll()
+renderEditionBanner()
 setView('findings', false)
 
 const restorePendingImport = () => {

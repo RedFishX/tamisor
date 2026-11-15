@@ -1,117 +1,4 @@
-@import '@fontsource/plus-jakarta-sans/latin-400.css';
-@import '@fontsource/plus-jakarta-sans/latin-500.css';
-@import '@fontsource/plus-jakarta-sans/latin-600.css';
-@import '@fontsource/plus-jakarta-sans/latin-700.css';
-@import '@fontsource/plus-jakarta-sans/latin-800.css';
-
-/* Chasse fixe : Azeret Mono, dont le zéro n'a ni point ni barre. Réduite à 92 % pour garder la largeur
-   de caractère de l'ancienne police (0,6 em) et ne pas décaler les mises en page. */
-@font-face {
-  font-family: 'Azeret Mono'; font-style: normal; font-weight: 400; font-display: swap;
-  src: url('@fontsource/azeret-mono/files/azeret-mono-latin-400-normal.woff2') format('woff2');
-  size-adjust: 92%;
-}
-@font-face {
-  font-family: 'Azeret Mono'; font-style: normal; font-weight: 500; font-display: swap;
-  src: url('@fontsource/azeret-mono/files/azeret-mono-latin-500-normal.woff2') format('woff2');
-  size-adjust: 92%;
-}
-@font-face {
-  font-family: 'Azeret Mono'; font-style: normal; font-weight: 600; font-display: swap;
-  src: url('@fontsource/azeret-mono/files/azeret-mono-latin-600-normal.woff2') format('woff2');
-  size-adjust: 92%;
-}
-
-/* Charte FortiScope : une couleur d'accent (green), des neutres teintés de vert, trois couleurs de signal. */
-:root {
-  --ink: #17201d;
-  --muted: #5c6662;      /* ≥ 4,5:1 (WCAG AA) sur tous les fonds clairs, y compris --count et les fonds de sévérité. */
-  --faint: #9ba39f;        /* décoratif uniquement : icônes, filets. Jamais pour du texte. */
-  --paper: #f6f7f4;
-  --surface: #ffffff;
-  --sidebar: #f0f2ee;
-  --subtle: #f1f4f0;
-  --detail: #fbfcfa;
-  --selected: #e9f2ed;
-  --line: #dfe3df;
-  --line-strong: #cdd3ce;
-  --count: #e6eae5;
-  --green: #146c53;
-  --green-soft: #e3f2eb;
-  --on-green: #ffffff;
-  --red: #b83232;
-  --red-soft: #fae7e4;
-  --error-line: #e9b8b1;
-  --amber: #955808;
-  --amber-soft: #fff0d2;
-  --blue: #2e609b;
-  --blue-soft: #e8f0fa;
-  --code-surface: #202724;
-  --code-ink: #dbe7df;
-  --code-label: #9eaaa4;
-  --code-line: #3a4540;
-  --scrim: rgba(10, 20, 15, .36);
-  --shadow-menu: 0 14px 35px rgba(10, 20, 15, .16);
-  --shadow-dialog: 0 24px 70px rgba(10, 20, 15, .32);
-
-  --font-sans: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'Azeret Mono', 'Cascadia Mono', Consolas, monospace;
-  --text-11: 11px;
-  --text-12: 12px;
-  --text-13: 13px;
-  --text-14: 14px;
-  --text-16: 16px;
-  --text-20: 20px;
-  --text-25: 25px;
-  --text-31: 31px;
-  --radius-badge: 3px;
-  --radius-control: 5px;
-  --radius-panel: 8px;
-  --control-height: 36px;
-  --ease: 160ms ease-out;
-
-  color: var(--ink);
-  background: var(--paper);
-  font-family: var(--font-sans);
-  font-size: var(--text-14);
-  line-height: 1.5;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-}
-
-:root[data-theme='dark'] {
-  --ink: #edf3ef;
-  --muted: #aebbb4;
-  --faint: #829089;
-  --paper: #111613;
-  --surface: #1a211d;
-  --sidebar: #151b18;
-  --subtle: #1f2723;
-  --detail: #161d19;
-  --selected: #213229;
-  --line: #323c36;
-  --line-strong: #465249;
-  --count: #2a332e;
-  --green: #55c59a;
-  --green-soft: #193b2e;
-  --on-green: #0d1f17;
-  --red: #ff8177;
-  --red-soft: #40221f;
-  --error-line: #6a2f2a;
-  --amber: #f0b85c;
-  --amber-soft: #3b301d;
-  --blue: #83b7ef;
-  --blue-soft: #20344a;
-  --code-surface: #0c110e;
-  --code-ink: #dbe7df;
-  --code-label: #9eaaa4;
-  --code-line: #2e3833;
-  --scrim: rgba(0, 0, 0, .58);
-  --shadow-menu: 0 14px 35px rgba(0, 0, 0, .5);
-  --shadow-dialog: 0 24px 70px rgba(0, 0, 0, .6);
-  color-scheme: dark;
-}
+@import './tokens.css';
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 0; min-height: 100vh; background: var(--paper); overflow-x: hidden; }
@@ -211,6 +98,11 @@ code, kbd { font-family: var(--font-mono); }
 .limitations { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: var(--text-12); }
 .limitations summary { color: var(--ink); font-size: var(--text-12); font-weight: 700; cursor: pointer; }
 .limitations p { margin: 8px 0 0; line-height: 1.6; }
+.sidebar-footer { color: var(--muted); font-size: var(--text-12); line-height: 1.6; }
+.sidebar-footer p { margin: 0 0 6px; }
+.sidebar-footer a { color: var(--ink); text-underline-offset: 3px; border-radius: 2px; transition: color 150ms ease-out; }
+.sidebar-footer a:hover { color: var(--green); }
+.sidebar-footer a:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 
 /* ---------- Contenu ---------- */
 .content { min-width: 0; padding: 32px clamp(20px, 3vw, 48px) 64px; display: flex; flex-direction: column; gap: 20px; }
@@ -811,3 +703,21 @@ button.metric.active strong { text-decoration: underline; text-decoration-thickn
   *, *::before, *::after { transition: none !important; }
   .meeting-live { animation: none; }
 }
+
+/* ---------- Bandeau et fonctions verrouillées d'une édition (voir edition.ts) ---------- */
+.edition-banner {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px;
+  padding: 12px 16px; background: var(--green-soft); border-left: 3px solid var(--green); border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  font-size: var(--text-13);
+}
+.edition-banner p { margin: 0; max-width: 72ch; }
+.edition-banner strong { margin-right: 6px; }
+.edition-banner-link { color: var(--green); font-weight: 700; text-underline-offset: 3px; white-space: nowrap; transition: color var(--ease); }
+.edition-banner-link:hover { color: var(--ink); }
+.locked-badge {
+  margin-left: auto; padding: 1px 6px; border: 1px solid var(--green); border-radius: var(--radius-badge);
+  color: var(--green); font-size: var(--text-11); font-style: normal; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+}
+#compare-button .locked-badge { margin-left: 6px; }
+.export-options button[data-locked] { grid-template-columns: 28px 1fr auto; }
+@media (max-width: 560px) { #compare-button .locked-badge { display: none; } }

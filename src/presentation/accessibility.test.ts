@@ -8,7 +8,7 @@ import { renderMeetingBoard, renderMeetingFocus } from './meeting-view'
 import { renderScoreSparkline } from './overview-view'
 
 const mainSource = readFileSync(new URL('./main.ts', import.meta.url), 'utf8')
-const styles = readFileSync(new URL('./style.css', import.meta.url), 'utf8')
+const styles = readFileSync(new URL('./tokens.css', import.meta.url), 'utf8') + readFileSync(new URL('./style.css', import.meta.url), 'utf8')
 
 afterEach(() => setLocale('fr'))
 

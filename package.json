@@ -1,10 +1,13 @@
 {
-  "name": "fortiscope",
+  "name": "shadowline",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "license": "AGPL-3.0-or-later",
+  "description": "Audit des politiques de pare-feu FortiGate dans le navigateur : règles permissives, masquées, sans journalisation.",
+  "repository": "github:RedFishX/shadowline",
   "type": "module",
   "bin": {
-    "fortiscope": "dist-cli/fortiscope.mjs"
+    "shadowline": "dist-cli/shadowline.mjs"
   },
   "scripts": {
     "dev": "vite",
