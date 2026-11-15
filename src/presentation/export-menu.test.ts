@@ -18,6 +18,6 @@ describe('renderExportMenu', () => {
 
   it('désactive chaque format tant qu’aucun audit n’est chargé', () => {
     const html = renderExportMenu(false)
-    expect(html.match(/disabled/g)).toHaveLength(5)
+    expect(html.match(/disabled/g)).toHaveLength(6)
   })
 })

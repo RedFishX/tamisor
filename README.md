@@ -29,13 +29,23 @@ Les compteurs Alertes critiques, Règles permissives et Règles masquées filtre
 
 Le profil de risque peut être réglé sur Standard ou Strict. Le détail d’un constat présente surtout une matrice métier pour chaque élément de la règle : interfaces, sources, destinations, services, horaire, action, NAT, profils de sécurité et journalisation. Chaque ligne indique un niveau faible, moyen ou élevé, la valeur concernée et une justification opérationnelle, sans exposer la formule de calcul.
 
-Les constats peuvent être acquittés localement et restaurés avec l’option `Afficher les acquittés`. Une seconde configuration peut être sélectionnée avec `Comparer` pour compter les politiques ajoutées, modifiées et supprimées. Les exports CSV peuvent aussi fournir `Hit Count` et `Last Used`.
+Le filtre « Hit count » range les policies par tranche d'utilisation (jamais, faible, moyenne, forte). Il n'est disponible qu'avec un export CSV qui contient la colonne `Hit Count`. Les constats peuvent être acquittés localement et restaurés avec l’option `Afficher les acquittés`. Une seconde configuration peut être sélectionnée avec `Comparer` pour compter les politiques ajoutées, modifiées et supprimées. Les exports CSV peuvent aussi fournir `Hit Count` et `Last Used`.
 
 Le menu `Exporter` regroupe les constats CSV, le rapport HTML interactif et les commandes CLI. Le rapport autonome reprend le langage visuel de FortiScope, permet de rechercher et filtrer les constats, de déplier leur détail et de lancer une impression propre. L’export CLI regroupe séparément les commandes de remédiation à examiner et adapter avant application.
 
 Depuis le détail d’un constat, `Créer la documentation Markdown` ouvre une fiche dédiée à la policy sélectionnée, prête à être copiée. Elle explique son sens de circulation, ses critères, ses statistiques d’utilisation et l’ensemble de ses constats avec leurs recommandations. Aucun fichier n’est téléchargé.
 
 Les exemples CLI sont des propositions, pas des commandes à appliquer aveuglément. Sauvegardez la configuration, vérifiez les compteurs et le Policy Match, puis testez tout changement sur un périmètre contrôlé.
+
+## Mode réunion
+
+L'onglet « Réunion » prépare et anime la revue des règles en équipe. Chaque carte du kanban représente une policy et regroupe tous ses constats. Les colonnes sont : À discuter, Supprimer, Modifier, Conserver et Reporter.
+
+- **Préparation** : le tableau se remplit tout seul avec chaque policy qui a au moins un constat ouvert (les constats sur des objets non référencés en sont exclus). Une policy dont tous les constats sont acquittés quitte le tableau, sauf si sa carte a déjà été travaillée (note, décision). La colonne « À discuter » est rangée en groupes repliables : Proposé supprimer, Proposé modifier, Proposé conserver, Sans proposition. Glisser une carte d'un groupe à l'autre change la proposition. Dans chaque groupe, les policies sont classées par hit count croissant, puis par sévérité ; « Trier par priorité » rétablit cet ordre après des déplacements à la main. La séance suit cet ordre. Les cartes affichent le hit count et chacune accepte une note.
+- **Séance** : « Démarrer la séance » ouvre une fiche plein écran. À gauche, l'ordre du jour liste les policies par proposition avec leur état (✓ décidée, ↷ reportée, ● en cours) et leur hit count ; un clic ouvre la policy voulue. Au centre, la proposition préparée est colorée (rouge supprimer, ambre modifier, vert conserver) avec l'argument d'usage et la note de préparation, puis le flux (interfaces, adresses, service) et les constats. En bas, une barre de décision toujours visible regroupe les boutons, la justification et l'échéance. Les décisions se prennent avec `S`, `M`, `C`, `R`, et `←`/`→` changent de policy. Sur le tableau, une carte se déplace par glisser-déposer ou avec les touches `1` à `5`.
+- **Compte rendu** : il est produit en Markdown (à copier ou télécharger) ou en HTML imprimable, avec les policies regroupées par décision.
+
+Le tableau est enregistré dans le `localStorage` du navigateur, par nom de fichier. Après un nouvel import, une policy qui n'existe plus reste sur le tableau et y est signalée. « Réinitialiser le tableau » efface notes et décisions et reconstruit le tableau à partir des constats ouverts.
 
 ## Conformité et historique
 

@@ -21,6 +21,9 @@ export const renderExportMenu = (auditReady: boolean): string => {
         <button id="ack-import-button" type="button" role="menuitem"${disabled}>
           <i data-lucide="upload"></i><span><strong>Importer les acquittements</strong><small>Restaurer un état partagé</small></span>
         </button>
+        <button id="minutes-export-button" type="button" role="menuitem"${disabled}>
+          <i data-lucide="presentation"></i><span><strong>Compte rendu de réunion</strong><small>Décisions par policy</small></span>
+        </button>
       </div>
     </details>
   `

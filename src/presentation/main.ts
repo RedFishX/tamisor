@@ -4,6 +4,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Clipboard,
   Download,
@@ -15,8 +16,10 @@ import {
   Moon,
   PanelLeft,
   Plus,
+  Presentation,
   Search,
   ShieldCheck,
+  Square,
   SquareTerminal,
   Sun,
   TableProperties,
@@ -43,6 +46,16 @@ import { comparePolicies } from '../domain/audit-comparison'
 import { createExecutiveSummary, renderHtmlReport, serializeRecommendationsCli } from './audit-report'
 import { resolveTheme, toggleTheme, type ResolvedTheme, type ThemePreference } from './theme'
 import { generatePolicyMarkdown } from './policy-documentation'
+import {
+  addPolicies, agenda, cardsInColumn, createBoard, findingsForCard, hasCard, meetingColumns, moveCard,
+  moveToDiscussGroup, policyForCard, policyKey, reconcileBoard, sortDiscussByPriority, syncBoard, updateCard,
+  type MeetingBoard, type MeetingCard, type MeetingCardPatch, type MeetingColumn, type MeetingProposal,
+} from '../domain/meeting'
+import { renderMinutesMarkdown } from '../domain/meeting-minutes'
+import { createMeetingStore } from '../application/meeting-store'
+import { decisionKeys, renderMeetingBoard, renderMeetingFocus, type MeetingCardContext } from './meeting-view'
+import { renderMinutesHtml } from './meeting-minutes-report'
+import { usageBand, usageBandLabels, usageBands, type UsageBand } from '../domain/policy-usage'
 
 const severityLabels: Record<Severity, string> = {
   critical: 'Critique',
@@ -82,11 +95,14 @@ let activeInterface = 'all'
 let activeSource = 'all'
 let activeDestination = 'all'
 let activeService = 'all'
+let activeUsage: UsageBand | 'all' = 'all'
 let selectedFindingId: string | null = audit.findings[0]?.id ?? null
 let showAcknowledged = false
 let searchQuery = ''
 let activeFamily: FindingFamily | 'all' = 'all'
-type View = 'overview' | 'findings'
+type View = 'overview' | 'findings' | 'meeting'
+const views: View[] = ['overview', 'findings', 'meeting']
+const viewHashes: Record<View, string> = { overview: '#synthese', findings: '#constats', meeting: '#reunion' }
 let activeView: View = 'findings'
 const compactLayout = window.matchMedia('(max-width: 900px)')
 let historyStore: HistoryStore | null = null
@@ -96,6 +112,13 @@ try { historyStore = createIndexedDbHistoryStore() } catch { historyUnavailable 
 let acknowledged = new Set<string>(JSON.parse(localStorage.getItem('fortiscope-acknowledged') ?? '[]'))
 let acknowledgementMetadata = new Map<string, AcknowledgementRecord>(Object.entries(JSON.parse(localStorage.getItem('fortiscope-acknowledgement-meta') ?? '{}')) as Array<[string, AcknowledgementRecord]>)
 let pendingAcknowledgement: { key: string, finding: Finding } | null = null
+const meetingStore = createMeetingStore(localStorage)
+let meetingBoard: MeetingBoard = createBoard('')
+/** File de navigation du mode focus : figée à l'ouverture pour que décider une carte ne la fasse pas sauter. */
+let focusQueue: string[] = []
+let focusKey: string | null = null
+/** Groupes de « À discuter » repliés (état d'affichage, non persistant). */
+const collapsedGroups = new Set<string>()
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)')
 const storedTheme = localStorage.getItem('fortiscope-theme') as ThemePreference | null
 let resolvedTheme: ResolvedTheme = resolveTheme(storedTheme ?? 'system', systemTheme.matches)
@@ -172,12 +195,14 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <nav class="view-tabs" role="tablist" aria-label="Vues de l’audit">
         <button type="button" role="tab" id="tab-overview" aria-controls="view-overview" data-view="overview">Vue d’ensemble</button>
         <button type="button" role="tab" id="tab-findings" aria-controls="view-findings" data-view="findings">Constats <span id="tab-findings-count"></span></button>
+        <button type="button" role="tab" id="tab-meeting" aria-controls="view-meeting" data-view="meeting">Réunion <span id="tab-meeting-count"></span></button>
       </nav>
 
       <div class="import-feedback" id="import-feedback" role="alert" hidden></div>
       <div class="comparison-summary" id="comparison-summary" hidden></div>
 
       <div class="overview" id="view-overview" role="tabpanel" aria-labelledby="tab-overview" hidden></div>
+      <div class="meeting" id="view-meeting" role="tabpanel" aria-labelledby="tab-meeting" hidden></div>
 
       <div class="view-panel" id="view-findings" role="tabpanel" aria-labelledby="tab-findings">
       <div class="metrics" id="metrics"></div>
@@ -217,6 +242,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
               <label class="select-field"><span>Source</span><select id="source-filter" aria-label="Filtrer par source"><option value="all">Toutes</option></select></label>
               <label class="select-field"><span>Destination</span><select id="destination-filter" aria-label="Filtrer par destination"><option value="all">Toutes</option></select></label>
               <label class="select-field"><span>Service</span><select id="service-filter" aria-label="Filtrer par service"><option value="all">Tous</option></select></label>
+              <label class="select-field"><span>Hit count</span><select id="usage-filter" aria-label="Filtrer par hit count"><option value="all">Tous</option></select></label>
             </div>
           </details>
           <label class="acknowledged-toggle">
@@ -246,6 +272,30 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <button class="acknowledge-button" id="copy-markdown" type="button"><i data-lucide="clipboard"></i>Copier le Markdown</button>
     </div>
   </dialog>
+  <dialog class="meeting-focus" id="meeting-focus" aria-label="Fiche de policy en réunion"></dialog>
+  <dialog class="markdown-dialog" id="minutes-dialog">
+    <div class="dialog-header">
+      <div><p class="eyebrow">Réunion de revue</p><h2>Compte rendu</h2></div>
+      <button class="icon-button" id="close-minutes" type="button" aria-label="Fermer" title="Fermer"><i data-lucide="x"></i></button>
+    </div>
+    <textarea id="minutes-markdown" readonly aria-label="Compte rendu au format Markdown"></textarea>
+    <div class="dialog-actions">
+      <span id="minutes-status" role="status"></span>
+      <button class="secondary-button" id="download-minutes-html" type="button"><i data-lucide="file-text"></i>HTML imprimable</button>
+      <button class="secondary-button" id="download-minutes-md" type="button"><i data-lucide="download"></i>Télécharger .md</button>
+      <button class="acknowledge-button" id="copy-minutes" type="button"><i data-lucide="clipboard"></i>Copier</button>
+    </div>
+  </dialog>
+  <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <form method="dialog">
+      <div class="dialog-header"><div><p class="eyebrow" id="confirm-eyebrow"></p><h2 id="confirm-title"></h2></div></div>
+      <p class="confirm-message" id="confirm-message"></p>
+      <div class="dialog-actions">
+        <button class="secondary-button" id="confirm-cancel" type="submit" value="cancel">Annuler</button>
+        <button class="acknowledge-button" id="confirm-accept" type="submit" value="confirm"></button>
+      </div>
+    </form>
+  </dialog>
   <dialog class="acknowledgement-dialog" id="acknowledgement-dialog">
     <div class="dialog-header">
       <div><p class="eyebrow">Revue du constat</p><h2>Acquitter ce constat</h2></div>
@@ -263,8 +313,37 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </dialog>
 `
 
+interface ConfirmationOptions {
+  eyebrow: string
+  title: string
+  message: string
+  confirmLabel: string
+  /** `null` : simple information, sans bouton d'annulation. */
+  cancelLabel?: string | null
+  tone?: 'danger' | 'neutral'
+}
+
+/** Remplace `window.confirm`/`window.alert` par une boîte de dialogue aux couleurs de l'application. */
+const askConfirmation = (options: ConfirmationOptions): Promise<boolean> => new Promise((resolve) => {
+  const dialog = document.querySelector<HTMLDialogElement>('#confirm-dialog')!
+  const cancel = document.querySelector<HTMLButtonElement>('#confirm-cancel')!
+  const accept = document.querySelector<HTMLButtonElement>('#confirm-accept')!
+  document.querySelector<HTMLElement>('#confirm-eyebrow')!.textContent = options.eyebrow
+  document.querySelector<HTMLElement>('#confirm-title')!.textContent = options.title
+  document.querySelector<HTMLElement>('#confirm-message')!.textContent = options.message
+  accept.textContent = options.confirmLabel
+  accept.classList.toggle('danger', options.tone === 'danger')
+  cancel.hidden = options.cancelLabel === null
+  cancel.textContent = options.cancelLabel ?? 'Annuler'
+  dialog.returnValue = ''
+  dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), { once: true })
+  dialog.showModal()
+  // Action destructrice : le focus initial reste sur « Annuler ».
+  ;(options.tone === 'danger' && !cancel.hidden ? cancel : accept).focus()
+})
+
 const renderIcons = () => createIcons({
-  icons: { AlertTriangle, BookOpen, Check, CheckCircle2, ChevronDown, ChevronRight, Clipboard, Download, FileSearch, FileText, Filter, GitCompareArrows, Info, Moon, PanelLeft, Plus, Search, ShieldCheck, SquareTerminal, Sun, TableProperties, Upload, X },
+  icons: { AlertTriangle, BookOpen, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Download, FileSearch, FileText, Filter, GitCompareArrows, Info, Moon, PanelLeft, Plus, Presentation, Search, ShieldCheck, Square, SquareTerminal, Sun, TableProperties, Upload, X },
 })
 
 const renderThemeToggle = () => {
@@ -291,7 +370,8 @@ const filteredFindings = (options: { ignoreSeverity?: boolean } = {}) => filterA
   const matchesSource = activeSource === 'all' || (policy?.srcaddr ?? []).includes(activeSource)
   const matchesDestination = activeDestination === 'all' || (policy?.dstaddr ?? []).includes(activeDestination)
   const matchesService = activeService === 'all' || [...(policy?.service ?? []), ...(policy?.internetServices ?? [])].includes(activeService)
-  return matchesSeverity && matchesCategory && matchesVdom && matchesInterface && matchesSource && matchesDestination && matchesService
+  const matchesUsage = activeUsage === 'all' || usageBand(policy) === activeUsage
+  return matchesSeverity && matchesCategory && matchesVdom && matchesInterface && matchesSource && matchesDestination && matchesService && matchesUsage
 })
 
 const renderContextFilters = () => {
@@ -309,7 +389,22 @@ const renderContextFilters = () => {
     if (select) select.innerHTML = options(values, selected, id === 'vdom-filter' ? 'Tous' : id === 'service-filter' ? 'Tous' : 'Toutes')
   }
   document.querySelector<HTMLSelectElement>('#category-filter')!.value = activeCategory
+  renderUsageFilter()
   renderFilterChips()
+}
+
+/** Tranches de hit count, avec le nombre de policies concernées ; désactivé si l'import n'en fournit pas (export CLI). */
+const renderUsageFilter = () => {
+  // Les tranches vides ne sont pas proposées.
+  const select = document.querySelector<HTMLSelectElement>('#usage-filter')!
+  const counts = new Map<UsageBand, number>()
+  for (const policy of audit.policies) counts.set(usageBand(policy), (counts.get(usageBand(policy)) ?? 0) + 1)
+  const available = audit.policies.length > 0 && (counts.get('unknown') ?? 0) < audit.policies.length
+  select.disabled = !available
+  select.title = available ? '' : 'Hit count absent : importez un export CSV qui contient la colonne « Hit Count ».'
+  select.innerHTML = `<option value="all">${available ? 'Tous' : 'Non disponible (export CLI)'}</option>` + (available
+    ? usageBands.filter((band) => counts.get(band) || band === activeUsage).map((band) => `<option value="${band}"${band === activeUsage ? ' selected' : ''}>${usageBandLabels[band]} · ${counts.get(band) ?? 0}</option>`).join('')
+    : '')
 }
 
 const categoryOptionLabel = (value: string) =>
@@ -324,6 +419,7 @@ const renderFilterChips = () => {
     ['source', 'Source', activeSource === 'all' ? '' : activeSource],
     ['destination', 'Destination', activeDestination === 'all' ? '' : activeDestination],
     ['service', 'Service', activeService === 'all' ? '' : activeService],
+    ['usage', 'Hit count', activeUsage === 'all' ? '' : usageBandLabels[activeUsage]],
   ]
   document.querySelector<HTMLDivElement>('#filter-chips')!.innerHTML = chips
     .filter(([, , value]) => value)
@@ -342,6 +438,7 @@ const clearFilter = (key: string) => {
   if (key === 'source') activeSource = 'all'
   if (key === 'destination') activeDestination = 'all'
   if (key === 'service') activeService = 'all'
+  if (key === 'usage') activeUsage = 'all'
 }
 
 const renderSource = () => {
@@ -351,6 +448,7 @@ const renderSource = () => {
   document.querySelector<HTMLButtonElement>('#cli-export-button')!.disabled = !sourceName
   document.querySelector<HTMLButtonElement>('#ack-export-button')!.disabled = !sourceName
   document.querySelector<HTMLButtonElement>('#ack-import-button')!.disabled = !sourceName
+  document.querySelector<HTMLButtonElement>('#minutes-export-button')!.disabled = !sourceName || !meetingBoard.cards.length
   if (!sourceName) {
     document.querySelector<HTMLDivElement>('#source-file')!.innerHTML = `
       <div class="source-icon"><i data-lucide="file-search"></i></div>
@@ -492,11 +590,14 @@ const renderDetail = (finding: Finding | undefined) => {
         <i data-lucide="check"></i>${isAcknowledged ? 'Restaurer le constat' : 'Acquitter le constat'}<kbd aria-hidden="true">A</kbd>
       </button>
       ${policy ? `<button class="policy-doc-button" type="button" data-policy-doc="${escapeHtml(finding.id)}"><i data-lucide="book-open"></i>Documentation Markdown</button>` : ''}
+      ${hasCard(meetingBoard, policyKey(finding))
+        ? `<button class="policy-doc-button" type="button" data-meeting-open="${escapeHtml(policyKey(finding))}"><i data-lucide="presentation"></i>Voir en réunion</button>`
+        : ''}
     </div>
   `
 }
 
-const hasActiveFilters = () => Boolean(searchQuery.trim()) || [activeSeverity, activeCategory, activeFamily, activeVdom, activeInterface, activeSource, activeDestination, activeService].some((value) => value !== 'all')
+const hasActiveFilters = () => Boolean(searchQuery.trim()) || [activeSeverity, activeCategory, activeFamily, activeVdom, activeInterface, activeSource, activeDestination, activeService, activeUsage].some((value) => value !== 'all')
 
 const renderNoResult = () => hasActiveFilters()
   ? `<div class="empty-list"><i data-lucide="filter"></i><strong>Aucun constat pour ces filtres</strong><span>Élargissez la recherche ou retirez un filtre.</span><button class="secondary-button" type="button" data-reset-filters>Retirer tous les filtres</button></div>`
@@ -575,25 +676,27 @@ const renderOverviewPanel = () => {
   })
 }
 
-const viewFromHash = (): View | null => location.hash === '#synthese' ? 'overview' : location.hash === '#constats' ? 'findings' : null
+const viewFromHash = (): View | null => views.find((view) => viewHashes[view] === location.hash) ?? null
 
 const setView = (view: View, updateHash = true) => {
   activeView = sourceName ? view : 'findings'
   document.querySelector<HTMLElement>('.content')!.dataset.view = activeView
   document.querySelector<HTMLDivElement>('#view-overview')!.hidden = activeView !== 'overview'
   document.querySelector<HTMLDivElement>('#view-findings')!.hidden = activeView !== 'findings'
+  document.querySelector<HTMLDivElement>('#view-meeting')!.hidden = activeView !== 'meeting'
   for (const tab of document.querySelectorAll<HTMLButtonElement>('.view-tabs [data-view]')) {
     const selected = tab.dataset.view === activeView
     tab.setAttribute('aria-selected', String(selected))
     tab.tabIndex = selected ? 0 : -1
   }
-  const hash = activeView === 'overview' ? '#synthese' : '#constats'
+  const hash = viewHashes[activeView]
   if (updateHash && sourceName && location.hash !== hash) history.replaceState(null, '', hash)
 }
 
 const renderAll = () => {
   renderSource()
   renderOverviewPanel()
+  renderMeetingPanel()
   renderHistoryPanel()
   renderConfigurationScore()
   renderContextFilters()
@@ -648,6 +751,8 @@ const loadConfiguration = async (content: string, name: string) => {
   }
   audit = nextAudit
   sourceName = name
+  meetingBoard = reconcileBoard(meetingStore.load(name) ?? createBoard(name), audit)
+  syncMeeting()
   selectedFindingId = audit.findings[0]?.id ?? null
   renderAll()
   setView(viewFromHash() ?? 'overview')
@@ -657,7 +762,13 @@ const loadConfiguration = async (content: string, name: string) => {
 const handleFile = async (file?: File) => {
   if (!file) return
   if (file.size > 10 * 1024 * 1024) {
-    window.alert('Le fichier dépasse la limite de 10 Mo.')
+    void askConfirmation({
+      eyebrow: 'Import impossible',
+      title: 'Fichier trop volumineux',
+      message: `${file.name} pèse ${(file.size / 1024 / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mo, au-delà de la limite de 10 Mo. Exportez uniquement la section « config firewall policy » ou le VDOM concerné.`,
+      confirmLabel: 'Compris',
+      cancelLabel: null,
+    })
     return
   }
   await loadConfiguration(await file.text(), file.name)
@@ -667,7 +778,13 @@ document.querySelector<HTMLInputElement>('#file-input')!.addEventListener('chang
   void handleFile((event.target as HTMLInputElement).files?.[0])
 })
 document.querySelector<HTMLButtonElement>('#history-clear')!.addEventListener('click', async () => {
-  if (!historyStore || !window.confirm('Effacer l’historique de tous les audits enregistrés dans ce navigateur ?')) return
+  if (!historyStore || !await askConfirmation({
+    eyebrow: 'Historique local',
+    title: 'Effacer l’historique ?',
+    message: 'Les notes et compteurs de tous les audits enregistrés dans ce navigateur seront supprimés. Les configurations elles-mêmes ne sont jamais stockées.',
+    confirmLabel: 'Effacer l’historique',
+    tone: 'danger',
+  })) return
   try { await historyStore.clear() } catch { historyUnavailable = true }
   historyEntries = []
   renderHistoryPanel()
@@ -704,6 +821,7 @@ const contextFilters: Array<[string, (value: string) => void]> = [
   ['source-filter', (value) => { activeSource = value }],
   ['destination-filter', (value) => { activeDestination = value }],
   ['service-filter', (value) => { activeService = value }],
+  ['usage-filter', (value) => { activeUsage = value as UsageBand | 'all' }],
 ]
 for (const [id, update] of contextFilters) {
   document.querySelector<HTMLSelectElement>(`#${id}`)!.addEventListener('change', (event) => {
@@ -749,7 +867,7 @@ document.querySelector<HTMLDivElement>('#findings-list')!.addEventListener('clic
     searchQuery = ''
     document.querySelector<HTMLInputElement>('#finding-search')!.value = ''
     activeSeverity = 'all'
-    for (const key of ['family', 'category', 'vdom', 'interface', 'source', 'destination', 'service']) clearFilter(key)
+    for (const key of ['family', 'category', 'vdom', 'interface', 'source', 'destination', 'service', 'usage']) clearFilter(key)
     renderContextFilters()
     refreshFindingsView()
   }
@@ -780,6 +898,12 @@ document.querySelector<HTMLElement>('#finding-detail')!.addEventListener('click'
       document.querySelector<HTMLSpanElement>('#copy-status')!.textContent = ''
       document.querySelector<HTMLDialogElement>('#markdown-dialog')!.showModal()
     }
+    return
+  }
+  const meetingOpen = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-meeting-open]')
+  if (meetingOpen?.dataset.meetingOpen) {
+    setView('meeting')
+    openFocus(meetingOpen.dataset.meetingOpen)
     return
   }
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-acknowledge]')
@@ -908,6 +1032,7 @@ document.querySelector<HTMLInputElement>('#ack-import-input')!.addEventListener(
 })
 
 const refreshFindingsView = () => {
+  if (syncMeeting()) renderMeetingPanel()
   renderOverviewPanel()
   renderFilterChips()
   renderMetrics()
@@ -1039,7 +1164,9 @@ document.querySelector<HTMLElement>('.view-tabs')!.addEventListener('click', (ev
 })
 document.querySelector<HTMLElement>('.view-tabs')!.addEventListener('keydown', (event) => {
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
-  const next: View = activeView === 'overview' ? 'findings' : 'overview'
+  const enabled = views.filter((view) => !document.querySelector<HTMLButtonElement>(`.view-tabs [data-view="${view}"]`)?.disabled)
+  const index = enabled.indexOf(activeView)
+  const next = enabled[(index + (event.key === 'ArrowRight' ? 1 : enabled.length - 1)) % enabled.length] ?? activeView
   setView(next)
   document.querySelector<HTMLButtonElement>(`.view-tabs [data-view="${next}"]`)?.focus()
 })
@@ -1049,7 +1176,7 @@ window.addEventListener('hashchange', () => {
 })
 
 const showFindingsWith = (apply: () => void) => {
-  for (const key of ['family', 'category', 'vdom', 'interface', 'source', 'destination', 'service']) clearFilter(key)
+  for (const key of ['family', 'category', 'vdom', 'interface', 'source', 'destination', 'service', 'usage']) clearFilter(key)
   activeSeverity = 'all'
   searchQuery = ''
   document.querySelector<HTMLInputElement>('#finding-search')!.value = ''
@@ -1070,6 +1197,344 @@ document.querySelector<HTMLDivElement>('#view-overview')!.addEventListener('clic
   else if (priority) showFindingsWith(() => { selectedFindingId = priority.dataset.priorityId ?? null })
   else if (target.closest('[data-show-findings]')) showFindingsWith(() => {})
 })
+
+/* ---------- Mode réunion ---------- */
+const meetingPanel = document.querySelector<HTMLDivElement>('#view-meeting')!
+const focusDialog = document.querySelector<HTMLDialogElement>('#meeting-focus')!
+const minutesDialog = document.querySelector<HTMLDialogElement>('#minutes-dialog')!
+
+const cardContext = (card: MeetingCard): MeetingCardContext => ({ policy: policyForCard(audit, card), findings: findingsForCard(audit, card) })
+const boardOrder = () => meetingColumns.flatMap((column) => cardsInColumn(meetingBoard, column)).map((card) => card.policyKey)
+const meetingRunning = () => Boolean(meetingBoard.startedAt && !meetingBoard.endedAt)
+
+let meetingSaveTimer: number | undefined
+const persistMeeting = (immediate = true) => {
+  window.clearTimeout(meetingSaveTimer)
+  if (immediate) meetingStore.save(meetingBoard)
+  else meetingSaveTimer = window.setTimeout(() => meetingStore.save(meetingBoard), 300)
+}
+
+const commitMeeting = (next: MeetingBoard) => {
+  meetingBoard = next
+  persistMeeting()
+  renderMeetingPanel()
+  if (activeView === 'findings') renderFindings()
+}
+
+/** Aligne le tableau sur les constats ouverts (au chargement et après un acquittement) ; n'enregistre que s'il a changé. */
+const syncMeeting = (): boolean => {
+  if (!sourceName) return false
+  const next = syncBoard(meetingBoard, openFindings(), audit.policies)
+  if (next === meetingBoard) return false
+  meetingBoard = next
+  persistMeeting()
+  return true
+}
+
+const renderMeetingPanel = () => {
+  const tab = document.querySelector<HTMLButtonElement>('#tab-meeting')!
+  tab.disabled = !sourceName
+  document.querySelector<HTMLSpanElement>('#tab-meeting-count')!.textContent = sourceName && meetingBoard.cards.length ? String(meetingBoard.cards.length) : ''
+  document.querySelector<HTMLButtonElement>('#minutes-export-button')!.disabled = !sourceName || !meetingBoard.cards.length
+  if (!sourceName) {
+    meetingPanel.innerHTML = ''
+    return
+  }
+  meetingPanel.innerHTML = renderMeetingBoard(meetingBoard, cardContext, collapsedGroups)
+  renderIcons()
+}
+
+const focusCardElement = (key: string) =>
+  meetingPanel.querySelector<HTMLElement>(`[data-card-key="${CSS.escape(key)}"]`)?.focus()
+
+const renderFocus = () => {
+  const card = meetingBoard.cards.find((candidate) => candidate.policyKey === focusKey)
+  if (!card) {
+    focusDialog.close()
+    return
+  }
+  const queue = focusQueue.map((key) => meetingBoard.cards.find((candidate) => candidate.policyKey === key)).filter((candidate): candidate is MeetingCard => Boolean(candidate))
+  const agendaScroll = focusDialog.querySelector('.focus-agenda')?.scrollTop
+  focusDialog.innerHTML = renderMeetingFocus(card, cardContext(card), { queue, running: meetingRunning() }, cardContext)
+  renderIcons()
+  const agendaList = focusDialog.querySelector<HTMLElement>('.focus-agenda')
+  if (agendaList && agendaScroll !== undefined) agendaList.scrollTop = agendaScroll
+  focusDialog.querySelector('.agenda-item.current')?.scrollIntoView({ block: 'nearest' })
+}
+
+/** L'ordre du jour s'affiche par proposition : la navigation suit le même ordre. */
+const proposalOrder = ['delete', 'modify', 'keep', undefined]
+const orderByProposal = (keys: string[]) => proposalOrder.flatMap((proposal) =>
+  keys.filter((key) => meetingBoard.cards.find((card) => card.policyKey === key)?.proposal === proposal))
+
+const openFocus = (key: string, queue = boardOrder()) => {
+  focusQueue = orderByProposal(queue.includes(key) ? queue : [key, ...queue])
+  focusKey = key
+  renderFocus()
+  if (!focusDialog.open) focusDialog.showModal()
+  focusDialog.querySelector<HTMLButtonElement>('[data-decide][aria-pressed="true"], [data-decide]')?.focus()
+}
+
+const stepFocus = (step: number) => {
+  const next = focusQueue[focusQueue.indexOf(focusKey ?? '') + step]
+  if (!next) return
+  focusKey = next
+  renderFocus()
+  focusDialog.querySelector<HTMLElement>('.focus-main')?.scrollTo({ top: 0 })
+}
+
+const decideFocused = (column: MeetingColumn) => {
+  if (!focusKey) return
+  meetingBoard = moveCard(meetingBoard, focusKey, column)
+  persistMeeting()
+  const index = focusQueue.indexOf(focusKey)
+  if (meetingRunning() && column !== 'discuss' && index < focusQueue.length - 1) stepFocus(1)
+  else renderFocus()
+  focusDialog.querySelector<HTMLButtonElement>(`[data-decide="${column}"]`)?.focus()
+}
+
+const openMinutes = () => {
+  document.querySelector<HTMLTextAreaElement>('#minutes-markdown')!.value = renderMinutesMarkdown(meetingBoard, audit)
+  document.querySelector<HTMLSpanElement>('#minutes-status')!.textContent = ''
+  minutesDialog.showModal()
+}
+
+const minutesFileName = (extension: string) => `compte-rendu-reunion-${meetingBoard.date || 'sans-date'}.${extension}`
+
+meetingPanel.addEventListener('click', (event) => {
+  const target = event.target as HTMLElement
+  if (target.closest('[data-meeting-start]')) {
+    meetingBoard = { ...meetingBoard, startedAt: meetingRunning() ? meetingBoard.startedAt : meetingBoard.startedAt ?? new Date().toISOString(), endedAt: undefined }
+    persistMeeting()
+    renderMeetingPanel()
+    const queue = agenda(meetingBoard).map((card) => card.policyKey)
+    const ordered = queue.length ? queue : boardOrder()
+    if (ordered[0]) openFocus(ordered[0], ordered)
+    return
+  }
+  if (target.closest('[data-meeting-end]')) {
+    commitMeeting({ ...meetingBoard, endedAt: new Date().toISOString() })
+    openMinutes()
+    return
+  }
+  const toggle = target.closest<HTMLButtonElement>('[data-toggle-group]')
+  if (toggle?.dataset.toggleGroup) {
+    const group = toggle.dataset.toggleGroup
+    if (!collapsedGroups.delete(group)) collapsedGroups.add(group)
+    renderMeetingPanel()
+    meetingPanel.querySelector<HTMLButtonElement>(`[data-toggle-group="${group}"]`)?.focus()
+    return
+  }
+  if (target.closest('[data-meeting-sort]')) {
+    commitMeeting(sortDiscussByPriority(meetingBoard, audit))
+    return
+  }
+  if (target.closest('[data-meeting-minutes]')) {
+    openMinutes()
+    return
+  }
+  if (target.closest('[data-meeting-clear]')) {
+    void askConfirmation({
+      eyebrow: 'Réunion de revue',
+      title: 'Réinitialiser le tableau ?',
+      message: 'Les notes, propositions modifiées, décisions et horaires de séance seront effacés. Le tableau sera reconstruit à partir des constats ouverts ; l’audit lui-même n’est pas modifié.',
+      confirmLabel: 'Réinitialiser',
+      tone: 'danger',
+    }).then((confirmed) => {
+      if (!confirmed) return
+      meetingStore.clear(sourceName)
+      meetingBoard = addPolicies(createBoard(sourceName), openFindings(), audit.policies)
+      persistMeeting()
+      renderMeetingPanel()
+      if (activeView === 'findings') renderFindings()
+    })
+    return
+  }
+  if (target.closest('select, label, input, textarea')) return
+  const card = target.closest<HTMLElement>('[data-card-key]')
+  if (card?.dataset.cardKey) openFocus(card.dataset.cardKey)
+})
+
+meetingPanel.addEventListener('change', (event) => {
+  const select = (event.target as HTMLElement).closest<HTMLSelectElement>('[data-move-card]')
+  const key = select?.closest<HTMLElement>('[data-card-key]')?.dataset.cardKey
+  if (!select || !key) return
+  const [column, proposal] = select.value.split(':')
+  commitMeeting(column === 'discuss' && proposal
+    ? moveToDiscussGroup(meetingBoard, key, proposal === 'none' ? undefined : proposal as MeetingProposal)
+    : moveCard(meetingBoard, key, column as MeetingColumn))
+  focusCardElement(key)
+})
+
+meetingPanel.addEventListener('input', (event) => {
+  const input = event.target as HTMLInputElement
+  const field = input.dataset.boardField
+  if (!field) return
+  if (field === 'title') meetingBoard = { ...meetingBoard, title: input.value }
+  else if (field === 'date') meetingBoard = { ...meetingBoard, date: input.value }
+  else if (field === 'participants') meetingBoard = { ...meetingBoard, participants: input.value.split(',').map((name) => name.trim()).filter(Boolean) }
+  persistMeeting(false)
+})
+
+meetingPanel.addEventListener('keydown', (event) => {
+  const card = event.target as HTMLElement
+  const key = card.dataset?.cardKey
+  if (!key || event.ctrlKey || event.metaKey || event.altKey) return
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    openFocus(key)
+  } else if (/^[1-5]$/.test(event.key)) {
+    event.preventDefault()
+    commitMeeting(moveCard(meetingBoard, key, meetingColumns[Number(event.key) - 1]))
+    focusCardElement(key)
+  } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    const sibling = event.key === 'ArrowDown' ? card.nextElementSibling : card.previousElementSibling
+    if (sibling instanceof HTMLElement && sibling.dataset.cardKey) sibling.focus()
+  }
+})
+
+let draggedKey: string | null = null
+const dropIndex = (list: HTMLElement, clientY: number) => {
+  const cards = [...list.querySelectorAll<HTMLElement>('[data-card-key]')].filter((card) => card.dataset.cardKey !== draggedKey)
+  const index = cards.findIndex((card) => {
+    const box = card.getBoundingClientRect()
+    return clientY < box.top + box.height / 2
+  })
+  return index === -1 ? cards.length : index
+}
+const clearDropTargets = () => meetingPanel.querySelectorAll('.drop-target').forEach((list) => list.classList.remove('drop-target'))
+
+meetingPanel.addEventListener('dragstart', (event) => {
+  const card = (event.target as HTMLElement).closest<HTMLElement>('[data-card-key]')
+  if (!card || !event.dataTransfer) return
+  draggedKey = card.dataset.cardKey ?? null
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', draggedKey ?? '')
+  card.classList.add('dragging')
+})
+meetingPanel.addEventListener('dragover', (event) => {
+  const list = (event.target as HTMLElement).closest<HTMLElement>('[data-drop-column]')
+  if (!list || !draggedKey) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  if (!list.classList.contains('drop-target')) {
+    clearDropTargets()
+    list.classList.add('drop-target')
+  }
+})
+meetingPanel.addEventListener('drop', (event) => {
+  const list = (event.target as HTMLElement).closest<HTMLElement>('[data-drop-column]')
+  if (!list || !draggedKey) return
+  event.preventDefault()
+  const key = draggedKey
+  draggedKey = null
+  const proposal = list.dataset.dropProposal
+  commitMeeting(proposal
+    ? moveToDiscussGroup(meetingBoard, key, proposal === 'none' ? undefined : proposal as MeetingProposal, dropIndex(list, event.clientY))
+    : moveCard(meetingBoard, key, list.dataset.dropColumn as MeetingColumn, dropIndex(list, event.clientY)))
+})
+meetingPanel.addEventListener('dragend', () => {
+  draggedKey = null
+  clearDropTargets()
+  meetingPanel.querySelectorAll('.dragging').forEach((card) => card.classList.remove('dragging'))
+})
+
+focusDialog.addEventListener('click', (event) => {
+  const target = event.target as HTMLElement
+  if (target === focusDialog || target.closest('[data-focus-close]')) {
+    focusDialog.close()
+    return
+  }
+  const goto = target.closest<HTMLButtonElement>('[data-focus-goto]')
+  if (goto?.dataset.focusGoto) {
+    focusKey = goto.dataset.focusGoto
+    renderFocus()
+    focusDialog.querySelector<HTMLElement>('.focus-main')?.scrollTo({ top: 0 })
+    focusDialog.querySelector<HTMLButtonElement>('.agenda-item.current')?.focus()
+    return
+  }
+  const step = target.closest<HTMLButtonElement>('[data-focus-step]')
+  if (step) {
+    stepFocus(Number(step.dataset.focusStep))
+    return
+  }
+  const decide = target.closest<HTMLButtonElement>('[data-decide]')
+  if (decide) {
+    decideFocused(decide.dataset.decide as MeetingColumn)
+    return
+  }
+  const copyButton = target.closest<HTMLButtonElement>('[data-copy-cli]')
+  if (copyButton) {
+    copyCli(copyButton)
+    return
+  }
+})
+
+const updateFocusedField = (element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, immediate: boolean) => {
+  const field = element.dataset.cardField as keyof MeetingCardPatch | undefined
+  if (!field || !focusKey) return
+  const patch: MeetingCardPatch = field === 'proposal'
+    ? { proposal: (element.value || undefined) as MeetingCardPatch['proposal'] }
+    : { [field]: element.value }
+  meetingBoard = updateCard(meetingBoard, focusKey, patch)
+  persistMeeting(immediate)
+}
+focusDialog.addEventListener('input', (event) => updateFocusedField(event.target as HTMLInputElement, false))
+focusDialog.addEventListener('change', (event) => {
+  const element = event.target as HTMLInputElement
+  updateFocusedField(element, true)
+  // La proposition colore le bloc de tête et marque le bouton de décision correspondant.
+  if (element.dataset.cardField === 'proposal') {
+    focusQueue = orderByProposal(focusQueue)
+    renderFocus()
+    focusDialog.querySelector<HTMLSelectElement>('[data-card-field="proposal"]')?.focus()
+  }
+})
+
+focusDialog.addEventListener('keydown', (event) => {
+  if (event.ctrlKey || event.metaKey || event.altKey || isTyping(event.target)) return
+  const column = decisionKeys[event.key.toLowerCase()]
+  if (column) {
+    event.preventDefault()
+    decideFocused(column)
+  } else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+    event.preventDefault()
+    stepFocus(event.key === 'ArrowRight' ? 1 : -1)
+  }
+})
+
+focusDialog.addEventListener('close', () => {
+  persistMeeting()
+  const key = focusKey
+  focusKey = null
+  renderMeetingPanel()
+  if (activeView === 'findings') renderFindings()
+  else if (key) focusCardElement(key)
+})
+
+document.querySelector<HTMLButtonElement>('#minutes-export-button')!.addEventListener('click', () => {
+  document.querySelector<HTMLDetailsElement>('#export-menu')!.open = false
+  openMinutes()
+})
+document.querySelector<HTMLButtonElement>('#close-minutes')!.addEventListener('click', () => minutesDialog.close())
+document.querySelector<HTMLButtonElement>('#copy-minutes')!.addEventListener('click', () => {
+  const textarea = document.querySelector<HTMLTextAreaElement>('#minutes-markdown')!
+  const copy = navigator.clipboard?.writeText(textarea.value) ?? Promise.reject()
+  void copy.catch(() => {
+    textarea.select()
+    document.execCommand('copy')
+  }).finally(() => {
+    document.querySelector<HTMLSpanElement>('#minutes-status')!.textContent = 'Compte rendu copié'
+  })
+})
+document.querySelector<HTMLButtonElement>('#download-minutes-md')!.addEventListener('click', () => {
+  downloadText(renderMinutesMarkdown(meetingBoard, audit), minutesFileName('md'), 'text/markdown;charset=utf-8')
+})
+document.querySelector<HTMLButtonElement>('#download-minutes-html')!.addEventListener('click', () => {
+  downloadText(renderMinutesHtml(meetingBoard, audit), minutesFileName('html'), 'text/html;charset=utf-8')
+})
+
 
 renderAll()
 setView('findings', false)
