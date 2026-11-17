@@ -56,7 +56,7 @@ describe('calculateRiskScore', () => {
         { ...finding, vdom: 'a:ipv4', family: 'ipv4', policyId: 'b', severity: 'critical' },
       ],
       stats: { activePolicies: 10 },
-    } as AuditResult
+    } as unknown as AuditResult
 
     expect(calculateConfigurationScore(audit)).toBe(64)
   })
