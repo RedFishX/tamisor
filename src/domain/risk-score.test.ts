@@ -46,4 +46,18 @@ describe('calculateRiskScore', () => {
     expect(calculateConfigurationScore(audit)).toBe(0)
     expect(calculateConfigurationScore({ ...audit, findings: [] })).toBe(100)
   })
+
+  it('ne confond pas deux politiques dont les identifiants contiennent « : »', () => {
+    // Avant : clés « a:ipv4:ipv4:b » identiques pour ces deux politiques, donc une seule pénalité plafonnée.
+    const audit = {
+      policies: [],
+      findings: [
+        { ...finding, vdom: 'a', family: 'ipv4', policyId: 'ipv4:b', severity: 'critical' },
+        { ...finding, vdom: 'a:ipv4', family: 'ipv4', policyId: 'b', severity: 'critical' },
+      ],
+      stats: { activePolicies: 10 },
+    } as AuditResult
+
+    expect(calculateConfigurationScore(audit)).toBe(64)
+  })
 })

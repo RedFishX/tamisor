@@ -39,7 +39,8 @@ const configurationPenalties: Record<Severity, number> = {
 export const calculateConfigurationScore = (audit: AuditResult): number => {
   const penaltyByPolicy = new Map<string, number>()
   for (const finding of audit.findings) {
-    const key = `${finding.vdom ?? 'global'}:${finding.family ?? 'ipv4'}:${finding.policyId}`
+    // Tuple sérialisé, pas une concaténation : un VDOM ou un id contenant « : » ne peut pas se confondre avec un autre.
+    const key = JSON.stringify([finding.vdom ?? 'global', finding.family ?? 'ipv4', finding.policyId])
     const current = penaltyByPolicy.get(key) ?? 0
     penaltyByPolicy.set(key, Math.min(25, current + configurationPenalties[finding.severity]))
   }
