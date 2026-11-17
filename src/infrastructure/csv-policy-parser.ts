@@ -1,5 +1,6 @@
 import Papa from 'papaparse'
 import type { FirewallPolicy } from '../domain/audit'
+import { singleLine } from '../domain/text-safety'
 import { tr } from '../i18n'
 
 type CsvRow = Record<string, string>
@@ -95,14 +96,14 @@ export const parseCsvPolicies = (content: string): { policies: FirewallPolicy[],
     const combinedPolicy = valueFor(row, 'policy')
     const combinedMatch = combinedPolicy.match(/^(.*?)\s*\((\d+)\)\s*$/)
     const combinedId = /^\d+$/.test(combinedPolicy) ? combinedPolicy : combinedMatch?.[2]
-    const id = valueFor(row, 'id') || combinedId || String(index + 1)
+    const id = singleLine(valueFor(row, 'id')) || combinedId || String(index + 1)
     const combinedName = combinedMatch?.[1].trim() || (/^\d+$/.test(combinedPolicy) ? '' : combinedPolicy)
     const schedules = splitList(valueFor(row, 'schedule'))
     return {
       id,
       family: 'ipv4' as const,
       order: index + 1,
-      name: valueFor(row, 'name') || combinedName || `Policy ${id}`,
+      name: singleLine(valueFor(row, 'name')) || singleLine(combinedName) || `Policy ${id}`,
       srcintf: splitList(valueFor(row, 'srcintf')),
       dstintf: splitList(valueFor(row, 'dstintf')),
       srcaddr: splitList(valueFor(row, 'srcaddr')),

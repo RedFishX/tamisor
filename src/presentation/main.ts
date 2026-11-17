@@ -613,7 +613,7 @@ const renderFindings = () => {
     return
   }
   list.innerHTML = findings.length ? findings.map((finding) => `
-    <button type="button" class="finding-row ${finding.id === selectedFindingId ? 'selected' : ''}" data-finding-id="${finding.id}"${finding.id === selectedFindingId ? ' aria-current="true"' : ''} aria-controls="finding-detail">
+    <button type="button" class="finding-row ${finding.id === selectedFindingId ? 'selected' : ''}" data-finding-id="${escapeHtml(finding.id)}"${finding.id === selectedFindingId ? ' aria-current="true"' : ''} aria-controls="finding-detail">
       <span class="severity-line ${finding.severity}"></span>
       <span class="finding-main">
         <span class="finding-meta"><span class="severity-badge ${finding.severity}">${severityLabel(finding.severity)}</span>${categoryLabel(finding.category)}</span>

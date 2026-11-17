@@ -1,6 +1,7 @@
 import type { Finding, Recommendation } from '../domain/audit'
 import { tr } from '../i18n'
 import { complianceReferences, formatComplianceReference } from '../domain/compliance'
+import { neutralizeSpreadsheetFormula } from '../domain/text-safety'
 
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>'"]/g, (character) => ({
@@ -43,7 +44,7 @@ export const renderCompliance = (finding: Pick<Finding, 'category'>): string => 
 `
 }
 
-const csvCell = (value: string): string => `"${value.replace(/"/g, '""')}"`
+const csvCell = (value: string): string => `"${neutralizeSpreadsheetFormula(value).replace(/"/g, '""')}"`
 
 export const serializeFindingsCsv = (findings: Finding[]): string => {
   const headers = tr(

@@ -2,6 +2,7 @@ import type { AuditResult, Finding, Severity } from '../domain/audit'
 import { complianceReferences } from '../domain/compliance'
 import { categoryFilterLabel, findingCategories } from '../domain/labels'
 import { calculateConfigurationScore } from '../domain/risk-score'
+import { singleLine } from '../domain/text-safety'
 import type { AcknowledgementRecord } from './finding-acknowledgement'
 import { acknowledgementKey } from './finding-acknowledgement'
 import { getLocale, tr } from '../i18n'
@@ -246,7 +247,7 @@ export const renderTextSummary = (context: ReportContext): string => {
   const gate = evaluateGate(reported, context.failOn)
   const counts = countBy(severityOrder, context.audit.findings.map((finding) => finding.severity))
   const lines = [
-    `${APP_NAME} ${context.toolVersion} · ${context.sourceUri}`,
+    `${APP_NAME} ${context.toolVersion} · ${singleLine(context.sourceUri)}`,
     tr(
       `${context.audit.stats.activePolicies} policies actives, ${context.audit.findings.length} constats `
         + `(critiques ${counts.critical}, élevés ${counts.high}, moyens ${counts.medium}, faibles ${counts.low}), note ${calculateConfigurationScore(context.audit)}/100`,
@@ -265,7 +266,7 @@ export const renderTextSummary = (context: ReportContext): string => {
       ? tr(`Seuil « ${gate.failOn} » respecté : aucun constat bloquant.`, `Threshold “${gate.failOn}” met: no blocking finding.`)
       : tr(`Seuil « ${gate.failOn} » dépassé : ${gate.blocking} constat(s) bloquant(s).`, `Threshold “${gate.failOn}” exceeded: ${gate.blocking} blocking finding(s).`))
     for (const { finding, line } of reported.filter((item) => item.blocking).slice(0, 20)) {
-      lines.push(`  - [${finding.severity}] ${context.sourceUri}${line ? `:${line}` : ''} #${finding.policyId} ${finding.policyName} — ${finding.title}`)
+      lines.push(`  - [${finding.severity}] ${singleLine(context.sourceUri)}${line ? `:${line}` : ''} #${singleLine(finding.policyId)} ${singleLine(finding.policyName)} — ${singleLine(finding.title)}`)
     }
     if (gate.blocking > 20) lines.push(tr(`  … et ${gate.blocking - 20} autre(s)`, `  … and ${gate.blocking - 20} more`))
   }

@@ -7,6 +7,7 @@ export type {
 } from './audit'
 import type { AuditResult, FirewallPolicy, Finding, Severity } from './audit'
 import { tr } from '../i18n'
+import { cliEditToken } from './text-safety'
 
 type Fields = Record<string, string[]>
 
@@ -20,7 +21,8 @@ const findingId = (category: Finding['category'], policy: FirewallPolicy): strin
 
 const tokenize = (value: string): string[] => {
   const tokens: string[] = []
-  const expression = /"((?:\\.|[^"])*)"|(\S+)/g
+  // Alternation sans recouvrement ([^"\\] et \\. sont disjoints) : temps linéaire même sans guillemet fermant.
+  const expression = /"([^"\\]*(?:\\.[^"\\]*)*)"|(\S+)/g
   let match: RegExpExecArray | null
   while ((match = expression.exec(value)) !== null) {
     tokens.push((match[1] ?? match[2]).replace(/\\"/g, '"'))
@@ -628,7 +630,7 @@ const permissiveFinding = (policy: FirewallPolicy): Finding | null => {
       summary: tr('Appliquer le principe du moindre privilège à chaque critère de correspondance de la politique.', 'Apply the principle of least privilege to every match criterion of the policy.'),
       actions,
       cli: cliChanges.length
-        ? `config firewall policy\n    edit ${policy.id}\n        ${cliChanges.join('\n        ')}\n    next\nend`
+        ? `config firewall policy\n    edit ${cliEditToken(policy.id)}\n        ${cliChanges.join('\n        ')}\n    next\nend`
         : undefined,
       reference: FORTINET_FIREWALL_POLICY_REFERENCE,
     },
@@ -689,7 +691,7 @@ const unusedFinding = (policy: FirewallPolicy): Finding | null => {
         tr('Confirmer avec les journaux et le propriétaire applicatif qu’aucun flux légitime ne dépend de cette règle.', 'Check the logs and the application owner to confirm that no legitimate flow depends on this rule.'),
         tr('Désactiver la règle pendant une période d’observation avant sa suppression.', 'Disable the rule for an observation period before deleting it.'),
       ],
-      cli: `config firewall policy\n    edit ${policy.id}\n        set status disable\n    next\nend`,
+      cli: `config firewall policy\n    edit ${cliEditToken(policy.id)}\n        set status disable\n    next\nend`,
       reference: FORTINET_FIREWALL_POLICY_REFERENCE,
     },
   }
@@ -824,7 +826,7 @@ const securityFinding = (policy: FirewallPolicy): Finding | null => {
           tr('Identifier la nature du flux (sortant Internet, entrant, inter-zones internes).', 'Identify the type of flow (outbound to the Internet, inbound, between internal zones).'),
           tr('Appliquer les profils adaptés ou documenter l’exception si le flux est interne et maîtrisé.', 'Apply suitable profiles, or document the exception if the flow is internal and controlled.'),
         ],
-        cli: `config firewall policy\n    edit ${policy.id}\n        set utm-status enable\n        set ips-sensor "default"\n        set av-profile "default"\n        set ssl-ssh-profile "certificate-inspection"\n    next\nend`,
+        cli: `config firewall policy\n    edit ${cliEditToken(policy.id)}\n        set utm-status enable\n        set ips-sensor "default"\n        set av-profile "default"\n        set ssl-ssh-profile "certificate-inspection"\n    next\nend`,
         reference: FORTINET_FIREWALL_POLICY_REFERENCE,
       },
     }
@@ -1070,7 +1072,7 @@ export const analyzePolicies = (
             tr('Comparer les options annexes, les compteurs et les commentaires des deux règles.', 'Compare the secondary options, counters and comments of both rules.'),
             tr('Conserver la règle de référence puis désactiver le doublon pendant une période d’observation.', 'Keep the reference rule, then disable the duplicate for an observation period.'),
           ],
-          cli: `config firewall policy\n    edit ${policy.id}\n        set status disable\n    next\nend`,
+          cli: `config firewall policy\n    edit ${cliEditToken(policy.id)}\n        set status disable\n    next\nend`,
           reference: FORTINET_FIREWALL_POLICY_REFERENCE,
         },
         duplicateOf: duplicatePolicy.id,
@@ -1112,7 +1114,7 @@ export const analyzePolicies = (
             tr(`Si la règle #${policy.id} est nécessaire, la déplacer avant la règle #${shadowingPolicy.id} puis tester le Policy Match.`, `If rule #${policy.id} is needed, move it above rule #${shadowingPolicy.id}, then test with Policy Match.`),
             tr('Sinon, désactiver la règle masquée pendant une période d’observation avant de la supprimer.', 'Otherwise, disable the shadowed rule for an observation period before deleting it.'),
           ],
-          cli: `config firewall policy\n    edit ${policy.id}\n        set status disable\n    next\nend`,
+          cli: `config firewall policy\n    edit ${cliEditToken(policy.id)}\n        set status disable\n    next\nend`,
           reference: FORTINET_FIREWALL_POLICY_REFERENCE,
         },
         shadowedBy: shadowingPolicy.id,
@@ -1178,7 +1180,7 @@ export const analyzePolicies = (
             tr('Activer la journalisation de toutes les sessions autorisées par cette règle.', 'Enable logging for every session this rule allows.'),
             tr('Vérifier la destination des journaux et leur durée de conservation avant la mise en production.', 'Check where logs are sent and how long they are kept before going live.'),
           ],
-          cli: `config firewall policy\n    edit ${policy.id}\n        set logtraffic all\n    next\nend`,
+          cli: `config firewall policy\n    edit ${cliEditToken(policy.id)}\n        set logtraffic all\n    next\nend`,
           reference: FORTINET_FIREWALL_POLICY_REFERENCE,
         },
       })

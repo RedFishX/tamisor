@@ -1,5 +1,6 @@
 import type { AuditResult, Finding } from '../domain/audit'
 import { complianceReferences } from '../domain/compliance'
+import { singleLine } from '../domain/text-safety'
 import { categoryLabel, findingCategories, severityLabel } from '../domain/labels'
 import { getLocale, plural as pluralWord, tr } from '../i18n'
 import { APP_NAME } from '../brand'
@@ -17,7 +18,7 @@ export const createExecutiveSummary = (audit: AuditResult): string => tr(
 
 export const serializeRecommendationsCli = (findings: Finding[]): string => findings
   .filter((finding) => finding.recommendation.cli)
-  .map((finding) => `# ${tr('Règle', 'Rule')} ${finding.policyId} - ${finding.policyName}\n# ${finding.title}\n${finding.recommendation.cli}`)
+  .map((finding) => `# ${tr('Règle', 'Rule')} ${singleLine(finding.policyId)} - ${singleLine(finding.policyName)}\n# ${singleLine(finding.title)}\n${finding.recommendation.cli}`)
   .join('\n\n')
 
 const findingCard = (finding: Finding): string => `<details class="finding severity-${finding.severity}" data-severity="${finding.severity}" data-category="${finding.category}" data-search="${escapeHtml(`${finding.policyId} ${finding.policyName} ${finding.title}`.toLowerCase())}" ${finding.severity === 'critical' ? 'open' : ''}><summary><span class="badge severity-${finding.severity}">${severityLabel(finding.severity)}</span><span class="finding-title"><strong class="policy-title">${escapeHtml(finding.policyName)}</strong><span>${tr('Règle', 'Rule')} #${escapeHtml(finding.policyId)} · ${escapeHtml(finding.title)} · ${categoryLabel(finding.category)}</span></span></summary><div class="finding-body"><p>${escapeHtml(finding.detail)}</p><h3>${tr('Éléments détectés', 'Detected items')}</h3><div class="evidence">${finding.evidence.map((item) => `<span>${escapeHtml(item)}</span>`).join('')}</div><h3>${tr('Actions recommandées', 'Recommended actions')}</h3><p>${escapeHtml(finding.recommendation.summary)}</p><ol>${finding.recommendation.actions.map((action) => `<li>${escapeHtml(action)}</li>`).join('')}</ol>${finding.recommendation.cli ? `<h3>${tr('Exemple CLI à adapter', 'CLI example to adapt')}</h3><pre>${escapeHtml(finding.recommendation.cli)}</pre>` : ''}<h3>${tr('Référentiels concernés (indicatif)', 'Related frameworks (indicative)')}</h3><ul>${complianceReferences(finding).map((reference) => `<li><strong>${escapeHtml(reference.framework)}</strong> ${escapeHtml(reference.control)} · ${escapeHtml(reference.title)}</li>`).join('')}</ul></div></details>`
