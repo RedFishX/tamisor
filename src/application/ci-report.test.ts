@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AuditResult, Finding } from '../domain/audit'
 import { meetingFinding as finding } from '../test-fixtures/meeting-fixtures'
 import {
-  buildJsonReport, buildSarifReport, classifyFindings, evaluateGate, parseBaselineIds, renderTextSummary, ruleId, type ReportContext,
+  buildJsonReport, buildSarifReport, classifyFindings, evaluateGate, parseBaselineIds, parseBaselineSeverities, renderTextSummary, ruleId, type ReportContext,
 } from './ci-report'
 
 const audit = (findings: Finding[]): AuditResult => ({
@@ -104,5 +104,32 @@ describe('résumé texte', () => {
     const text = renderTextSummary(context())
     expect(text).toContain('Seuil « high » dépassé : 2 constat(s) bloquant(s).')
     expect(text).toContain('  - [critical] firewalls/fw-siege.conf:41 #10 Internet — Règle très permissive')
+  })
+})
+
+describe('durcissement du gate', () => {
+  it('traite une date de revue vide ou mal formée comme échue', () => {
+    for (const reviewDate of ['', 'z', '9999', '2026-1-5', '31/12/2026']) {
+      const reported = classifyFindings(context({ acknowledgements: [acknowledgement('permissive-root-ipv4-10', reviewDate)] }))
+      expect(reported.find((item) => item.finding.id === 'permissive-root-ipv4-10')).toMatchObject({ status: 'acknowledgement-expired', blocking: true })
+    }
+    const valid = classifyFindings(context({ acknowledgements: [acknowledgement('permissive-root-ipv4-10', '2026-12-31')] }))
+    expect(valid.find((item) => item.finding.id === 'permissive-root-ipv4-10')?.status).toBe('acknowledged')
+  })
+
+  it('compte comme nouveau un constat dont la sévérité a augmenté depuis la référence', () => {
+    const baselineIds = new Set(findings.map((item) => item.id))
+    const same = classifyFindings(context({ baselineIds, baselineSeverities: new Map(findings.map((item) => [item.id, item.severity])) }))
+    expect(same.every((item) => item.baseline === 'unchanged')).toBe(true)
+    const escalated = classifyFindings(context({ baselineIds, baselineSeverities: new Map([['permissive-root-ipv4-10', 'medium' as const]]) }))
+    expect(escalated.find((item) => item.finding.id === 'permissive-root-ipv4-10')).toMatchObject({ baseline: 'new', blocking: true })
+    expect(escalated.find((item) => item.finding.id === 'shadowed-root-ipv4-20')?.baseline).toBe('unchanged')
+  })
+
+  it('relit les sévérités d’un rapport JSON de référence', () => {
+    const report = buildJsonReport(context())
+    const severities = parseBaselineSeverities(JSON.stringify(report))
+    expect(severities.get('permissive-root-ipv4-10')).toBe('critical')
+    expect(severities.get('visibility-root-ipv4-30')).toBe('medium')
   })
 })

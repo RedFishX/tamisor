@@ -27,6 +27,8 @@ export interface ReportContext {
   acknowledgements?: AcknowledgementRecord[]
   /** Identifiants de constats d'un rapport précédent : seuls les nouveaux comptent pour le seuil. */
   baselineIds?: Set<string>
+  /** Sévérité de chaque constat dans la référence : un constat dont la sévérité a augmenté depuis compte comme nouveau. */
+  baselineSeverities?: Map<string, Severity>
   failOn?: FailOn
   /** Date du jour (AAAA-MM-JJ) pour décider si un acquittement est échu ; injectable pour les tests. */
   today?: string
@@ -44,6 +46,9 @@ export interface ReportedFinding {
   blocking: boolean
 }
 
+/** Une date de revue doit être AAAA-MM-JJ et ne pas être passée : une valeur vide ou mal formée ne protège rien. */
+const isReviewCurrent = (reviewDate: string, today: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(reviewDate) && reviewDate >= today
+
 const fileName = (uri: string) => uri.split(/[\\/]/).pop() ?? uri
 
 /**
@@ -59,8 +64,10 @@ export const classifyFindings = (context: ReportContext): ReportedFinding[] => {
     const acknowledgement = records.get(acknowledgementKey(fileName(context.sourceUri), finding))
     const status: FindingStatus = !acknowledgement
       ? 'open'
-      : acknowledgement.reviewDate && acknowledgement.reviewDate < today ? 'acknowledgement-expired' : 'acknowledged'
-    const baseline = context.baselineIds ? (context.baselineIds.has(finding.id) ? 'unchanged' : 'new') : undefined
+      : isReviewCurrent(acknowledgement.reviewDate, today) ? 'acknowledged' : 'acknowledgement-expired'
+    const escalated = (context.baselineSeverities?.has(finding.id) ?? false)
+      && severityOrder.indexOf(finding.severity) < severityOrder.indexOf(context.baselineSeverities!.get(finding.id)!)
+    const baseline = context.baselineIds ? (context.baselineIds.has(finding.id) && !escalated ? 'unchanged' : 'new') : undefined
     const blocking = status !== 'acknowledged'
       && thresholdRank >= 0 && severityOrder.indexOf(finding.severity) <= thresholdRank
       && baseline !== 'unchanged'
@@ -151,6 +158,17 @@ export const parseBaselineIds = (content: string): Set<string> => {
     throw new Error(tr(`Référence invalide : un rapport JSON ${APP_NAME} est attendu.`, `Invalid baseline: a ${APP_NAME} JSON report is expected.`))
   }
   return new Set(report.findings.map((finding) => (finding as { id?: unknown }).id).filter((id): id is string => typeof id === 'string'))
+}
+
+/** Sévérité de chaque constat d'un rapport JSON précédent, pour repérer une aggravation depuis la référence. */
+export const parseBaselineSeverities = (content: string): Map<string, Severity> => {
+  const report = JSON.parse(content) as Partial<JsonReport> | null
+  const severities = new Map<string, Severity>()
+  for (const finding of Array.isArray(report?.findings) ? report.findings : []) {
+    const { id, severity } = finding as { id?: unknown, severity?: unknown }
+    if (typeof id === 'string' && severityOrder.includes(severity as Severity)) severities.set(id, severity as Severity)
+  }
+  return severities
 }
 
 /* ---------- SARIF 2.1.0 ---------- */

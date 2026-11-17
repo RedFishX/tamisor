@@ -11,12 +11,13 @@ import { basename } from 'node:path'
 import process from 'node:process'
 import { parseArgs } from 'node:util'
 import packageJson from '../../package.json'
+import type { Severity } from '../domain/audit'
 import { isLocale, setLocale, tr } from '../i18n'
 import { analyzeImportedConfiguration } from '../infrastructure/configuration-import'
 import { createConfigLocator } from '../infrastructure/config-locations'
 import { parseAcknowledgements } from '../application/finding-acknowledgement'
 import {
-  buildJsonReport, buildSarifReport, evaluateGate, classifyFindings, parseBaselineIds, renderTextSummary, severityOrder,
+  buildJsonReport, buildSarifReport, evaluateGate, classifyFindings, parseBaselineIds, parseBaselineSeverities, renderTextSummary, severityOrder,
   type FailOn, type ReportContext,
 } from '../application/ci-report'
 
@@ -99,9 +100,14 @@ export const run = (argv: string[]): number => {
   }
 
   let baselineIds: Set<string> | undefined
+  let baselineSeverities: Map<string, Severity> | undefined
   if (values.baseline) {
     // Premier passage (pas encore de rapport sur la branche cible) : on continue sans référence.
-    if (existsSync(values.baseline)) baselineIds = parseBaselineIds(readFileSync(values.baseline, 'utf8'))
+    if (existsSync(values.baseline)) {
+      const baselineContent = readFileSync(values.baseline, 'utf8')
+      baselineIds = parseBaselineIds(baselineContent)
+      baselineSeverities = parseBaselineSeverities(baselineContent)
+    }
     else process.stderr.write(`${tr('Référence introuvable, analyse sans référence :', 'Baseline not found, running without it:')} ${values.baseline}\n`)
   }
 
@@ -112,6 +118,7 @@ export const run = (argv: string[]): number => {
     locate: createConfigLocator(content, path),
     acknowledgements: values.acknowledgements ? parseAcknowledgements(readFileSync(values.acknowledgements, 'utf8')) : [],
     baselineIds,
+    baselineSeverities,
     failOn,
   }
   if (values.sarif) write(values.sarif, JSON.stringify(buildSarifReport(context), null, 2))
