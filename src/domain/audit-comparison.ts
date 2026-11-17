@@ -1,4 +1,5 @@
 import type { FirewallPolicy } from './audit'
+import { policyKey } from './policy-key'
 
 export interface PolicyComparison {
   added: FirewallPolicy[]
@@ -6,8 +7,6 @@ export interface PolicyComparison {
   modified: Array<{ before: FirewallPolicy, after: FirewallPolicy, changedFields: string[] }>
 }
 
-const policyKey = (policy: FirewallPolicy): string =>
-  `${policy.vdom ?? 'global'}:${policy.family ?? 'ipv4'}:${policy.id}`
 
 const comparablePolicy = ({ order: _order, ...policy }: FirewallPolicy): string =>
   JSON.stringify(policy)

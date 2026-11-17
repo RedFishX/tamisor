@@ -20,4 +20,14 @@ describe('comparePolicies', () => {
     expect(result.removed.map((item) => item.id)).toEqual(['2'])
     expect(result.modified.map((item) => item.after.id)).toEqual(['1'])
   })
+
+  it('ne confond pas deux politiques dont le VDOM ou l’id contient le séparateur', () => {
+    // Ancien séparateur « : » : les deux donnaient « a:ipv4:ipv4:b ».
+    const first = { ...policy('ipv4:b', 'A'), vdom: 'a' }
+    const second = { ...policy('b', 'B'), vdom: 'a:ipv4' }
+    const result = comparePolicies([first], [second])
+    expect(result.added.map((item) => item.name)).toEqual(['B'])
+    expect(result.removed.map((item) => item.name)).toEqual(['A'])
+    expect(result.modified).toEqual([])
+  })
 })

@@ -1,4 +1,4 @@
-import { meetingColumns, type MeetingBoard, type MeetingCard } from '../domain/meeting'
+import { meetingColumns, policyKey, type MeetingBoard, type MeetingCard } from '../domain/meeting'
 
 /** Stockage clé/valeur minimal (compatible `localStorage`), injecté pour rester testable. */
 export interface KeyValueStorage {
@@ -24,6 +24,11 @@ const isCard = (value: unknown): value is MeetingCard => {
 
 export const serializeBoard = (board: MeetingBoard): string => JSON.stringify(board)
 
+const uniqueByKey = (cards: MeetingCard[]): MeetingCard[] => {
+  const seen = new Set<string>()
+  return cards.filter((card) => !seen.has(card.policyKey) && Boolean(seen.add(card.policyKey)))
+}
+
 /** Relit un tableau ; renvoie `null` si le contenu est absent ou invalide. Les cartes mal formées sont écartées. */
 export const parseBoard = (content: string | null): MeetingBoard | null => {
   if (!content) return null
@@ -40,7 +45,13 @@ export const parseBoard = (content: string | null): MeetingBoard | null => {
     date: board.date,
     participants: board.participants.filter(isString),
     // Les anciens champs « notes de séance » et « responsable » des tableaux déjà enregistrés sont ignorés.
-    cards: board.cards.filter(isCard).map(({ meetingNote: _meetingNote, owner: _owner, ...card }: MeetingCard & { meetingNote?: unknown, owner?: unknown }) => ({ ...card, orphan: undefined })),
+    cards: uniqueByKey(board.cards.filter(isCard).map(({ meetingNote: _meetingNote, owner: _owner, ...card }: MeetingCard & { meetingNote?: unknown, owner?: unknown }) => ({
+      ...card,
+      // La clé est dérivée de VDOM, famille et id : on la recalcule à la lecture. Un tableau enregistré avec l'ancienne
+      // clé (ambiguë si un VDOM ou un id contenait « | ») est ainsi migré ; pour les valeurs ordinaires rien ne change.
+      policyKey: policyKey(card),
+      orphan: undefined,
+    }))),
     startedAt: isString(board.startedAt) ? board.startedAt : undefined,
     endedAt: isString(board.endedAt) ? board.endedAt : undefined,
   }

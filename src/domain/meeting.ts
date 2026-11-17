@@ -1,5 +1,6 @@
 import type { AuditResult, Finding, FirewallPolicy, Severity } from './audit'
 import { tr } from '../i18n'
+import { policyKey } from './policy-key'
 
 /** Colonnes du tableau de réunion : une colonne d'entrée et quatre issues possibles. */
 export type MeetingColumn = 'discuss' | 'delete' | 'modify' | 'keep' | 'postpone'
@@ -44,11 +45,8 @@ export interface MeetingBoard {
   endedAt?: string
 }
 
-type PolicyRef = { id?: string, policyId?: string, vdom?: string, family?: 'ipv4' | 'ipv6' }
-
 /** Clé stable d'une policy, identique pour la policy et ses constats ; VDOM et famille IP la distinguent. */
-export const policyKey = (reference: PolicyRef): string =>
-  `${reference.vdom ?? 'global'}|${reference.family ?? 'ipv4'}|${reference.policyId ?? reference.id ?? ''}`
+export { policyKey }
 
 const today = (): string => new Date().toISOString().slice(0, 10)
 
