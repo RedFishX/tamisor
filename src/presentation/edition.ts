@@ -22,6 +22,13 @@ export interface DialogOptions {
 }
 
 /** Services de l'interface mis à disposition de l'édition. */
+/**
+ * HTML que l'hôte insère sans l'échapper (barre du haut, bandeau, mention de taille). Le type oblige l'édition à le
+ * déclarer explicitement avec `trustedHtml`, après avoir échappé (`escapeHtml`) toute donnée variable (e-mail, etc.).
+ */
+export type SafeHtml = string & { readonly __safeHtml: true }
+export const trustedHtml = (html: string): SafeHtml => html as SafeHtml
+
 export interface EditionUi {
   /** Boîte de dialogue aux couleurs de l'application ; résout `true` si l'utilisateur confirme. */
   confirm(options: DialogOptions): Promise<boolean>
@@ -56,7 +63,7 @@ export interface Edition {
   lockedDescription?: string
   onLockedFeature?(featureId: string, ui: EditionUi): void
   /** Remplace la mention de taille sous la zone de dépôt. */
-  fileTypesHint?(): string
+  fileTypesHint?(): SafeHtml
   /** Avant la lecture du fichier. `false` : import abandonné. */
   beforeImport?(file: { name: string, size: number }, ui: EditionUi): boolean | Promise<boolean>
   /** Fichier lu en mémoire, avant l'analyse. `false` : import abandonné. */
@@ -66,9 +73,9 @@ export interface Edition {
   /** Actions supplémentaires du menu « Exporter ». */
   exportActions?: readonly EditionAction[]
   /** Élément ajouté à droite de la barre du haut, après le thème (HTML de confiance, produit par l'édition). */
-  toolbarItem?: { render(): string }
+  toolbarItem?: { render(): SafeHtml }
   /** Bandeau au-dessus des vues (HTML de confiance, produit par l'édition). */
-  banner?: { label: string, render(): string }
+  banner?: { label: string, render(): SafeHtml }
 }
 
 let current: Edition = {}
