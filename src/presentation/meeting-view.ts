@@ -8,9 +8,8 @@ import { categoryLabel, colon, severityLabel } from '../domain/labels'
 import { formatHits, formatUsage, usageBand } from '../domain/policy-usage'
 import { getLocale, plural, tr } from '../i18n'
 import { renderRecommendation } from './recommendation-view'
+import { escapeHtml } from './html'
 
-const escapeHtml = (value: string): string =>
-  value.replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character] ?? character)
 
 /**
  * Touches de décision en séance : l'initiale de chaque décision dans la langue courante

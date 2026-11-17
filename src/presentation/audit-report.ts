@@ -4,10 +4,8 @@ import { singleLine } from '../domain/text-safety'
 import { categoryLabel, findingCategories, severityLabel } from '../domain/labels'
 import { getLocale, plural as pluralWord, tr } from '../i18n'
 import { APP_NAME } from '../brand'
+import { escapeHtml } from './html'
 
-const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (character) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-})[character] ?? character)
 
 const count = (value: number, fr: [string, string], en: [string, string]) => `${value} ${pluralWord(value, fr, en)}`
 

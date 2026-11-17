@@ -106,9 +106,9 @@ const parsePolicies = (
     const comments = field(fields, 'comments').join(' ')
     const expirationDate = field(fields, 'expiration', field(fields, 'expiry', field(fields, 'expires')))[0]
     const ticket = field(fields, 'ticket', field(fields, 'change-ticket', field(fields, 'change-ticket-id')))[0]
-      || comments.match(/\b(?:ticket|change)\s*[:#-]?\s*([A-Z]{2,}-\d+|\w+)/i)?.[1]
+      || comments.match(/\b(?:ticket|change)\s{0,8}[:#-]?\s{0,8}([A-Z]{2,}-\d+|\w+)/i)?.[1]
     const owner = field(fields, 'owner', field(fields, 'policy-owner'))[0]
-      || comments.match(/\bowner\s*[:#-]?\s*([\w.-]+)/i)?.[1]
+      || comments.match(/\bowner\s{0,8}[:#-]?\s{0,8}([\w.-]+)/i)?.[1]
     const profileGroupName = field(fields, 'profile-group')[0]
     const profileGroup = profileGroupName ? profileGroups.get(profileGroupName) : undefined
     const profileKeys = ['av-profile', 'webfilter-profile', 'application-list', 'ips-sensor', 'dnsfilter-profile']

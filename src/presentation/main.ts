@@ -65,6 +65,7 @@ import { categoryFilterLabel, categoryLabel, findingCategories, severityLabel } 
 import { formatDate, formatNumber, getLocale, localeStorageKey, plural, tr, type Locale } from '../i18n'
 import { APP_NAME, APP_SLUG, SOURCE_URL, storageKey } from '../brand'
 import { countLines, getEdition, isLocked, type AuditContext, type DialogOptions, type EditionUi } from './edition'
+import { escapeHtml } from './html'
 
 const elementRiskLabel = (level: ElementRiskLevel): string => ({
   high: tr('Élevé', 'High'),
@@ -103,8 +104,18 @@ let historyStore: HistoryStore | null = null
 let historyEntries: HistoryEntry[] = []
 let historyUnavailable = false
 try { historyStore = createIndexedDbHistoryStore() } catch { historyUnavailable = true }
-let acknowledged = new Set<string>(JSON.parse(localStorage.getItem(storageKey('acknowledged')) ?? '[]'))
-let acknowledgementMetadata = new Map<string, AcknowledgementRecord>(Object.entries(JSON.parse(localStorage.getItem(storageKey('acknowledgement-meta')) ?? '{}')) as Array<[string, AcknowledgementRecord]>)
+/** Lecture tolérante du stockage local : une valeur absente, corrompue ou d'une autre forme ne doit pas empêcher le démarrage. */
+const readStored = (name: string, accepts: (value: unknown) => boolean, fallback: unknown): unknown => {
+  try {
+    const raw = localStorage.getItem(storageKey(name))
+    const value: unknown = raw === null ? fallback : JSON.parse(raw)
+    return accepts(value) ? value : fallback
+  } catch {
+    return fallback
+  }
+}
+let acknowledged = new Set<string>((readStored('acknowledged', Array.isArray, []) as unknown[]).filter((key): key is string => typeof key === 'string'))
+let acknowledgementMetadata = new Map<string, AcknowledgementRecord>(Object.entries(readStored('acknowledgement-meta', (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value), {}) as object) as Array<[string, AcknowledgementRecord]>)
 let pendingAcknowledgement: { key: string, finding: Finding } | null = null
 const meetingStore = createMeetingStore(localStorage)
 let meetingBoard: MeetingBoard = createBoard('')
@@ -118,14 +129,6 @@ const storedTheme = localStorage.getItem(storageKey('theme')) as ThemePreference
 let resolvedTheme: ResolvedTheme = resolveTheme(storedTheme ?? 'system', systemTheme.matches)
 document.documentElement.dataset.theme = resolvedTheme
 
-const escapeHtml = (value: string) =>
-  value.replace(/[&<>'"]/g, (character) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    "'": '&#39;',
-    '"': '&quot;',
-  })[character] ?? character)
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <a class="skip-link" href="#main-content">${tr('Aller au contenu', 'Skip to content')}</a>
@@ -730,16 +733,25 @@ const renderImportProgress = (message: string) => {
   feedback.innerHTML = `<div role="status">${escapeHtml(message)}</div>`
 }
 
+/** Au-delà, l'analyse est interrompue : un fichier pathologique ne doit pas laisser l'import tourner indéfiniment. */
+const ANALYSIS_TIMEOUT_MS = 120_000
+
 const analyzeWithWorker = (content: string, fileName: string, onProgress: (message: string) => void = renderImportProgress): Promise<ImportedAuditResult> => new Promise((resolve, reject) => {
   const worker = new Worker(new URL('./audit.worker.ts', import.meta.url), { type: 'module' })
+  const timer = setTimeout(() => {
+    worker.terminate()
+    reject(new Error(tr('L’analyse a dépassé le délai de 2 minutes et a été interrompue. Réduisez le fichier (section « config firewall policy » ou VDOM concerné).', 'The analysis exceeded the 2-minute limit and was stopped. Reduce the file (the “config firewall policy” section or the relevant VDOM).')))
+  }, ANALYSIS_TIMEOUT_MS)
   worker.onmessage = (event: MessageEvent<{ type: string, message?: string, result?: ImportedAuditResult }>) => {
     if (event.data.type === 'progress' && event.data.message) onProgress(event.data.message)
     if (event.data.type === 'result' && event.data.result) {
+      clearTimeout(timer)
       worker.terminate()
       resolve(event.data.result)
     }
   }
   worker.onerror = (error) => {
+    clearTimeout(timer)
     worker.terminate()
     reject(error)
   }
@@ -750,7 +762,13 @@ const analyzeWithWorker = (content: string, fileName: string, onProgress: (messa
 let lastImport: { content: string, name: string } | null = null
 
 const loadConfiguration = async (content: string, name: string, options: { restored?: boolean } = {}) => {
-  const nextAudit = await analyzeWithWorker(content, name)
+  let nextAudit: ImportedAuditResult
+  try {
+    nextAudit = await analyzeWithWorker(content, name)
+  } catch (error) {
+    renderImportErrors([error instanceof Error && error.message ? error.message : tr('L’analyse a échoué.', 'The analysis failed.')])
+    return
+  }
   renderImportErrors(nextAudit.importErrors)
   if (!nextAudit.policies.length) {
     return

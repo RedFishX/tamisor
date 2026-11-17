@@ -6,6 +6,7 @@ import { analyzeConfiguration } from './domain/analyzer'
 import { cliEditToken, neutralizeSpreadsheetFormula, singleLine } from './domain/text-safety'
 import { analyzeImportedConfiguration } from './infrastructure/configuration-import'
 import { serializeRecommendationsCli } from './presentation/audit-report'
+import { escapeHtml } from './presentation/html'
 import { serializeFindingsCsv } from './presentation/recommendation-view'
 import { meetingFinding } from './test-fixtures/meeting-fixtures'
 
@@ -93,5 +94,29 @@ describe('liste des constats (DOM)', () => {
     const source = readFileSync(new URL('./presentation/main.ts', import.meta.url), 'utf8')
     expect(source).toContain('data-finding-id="${escapeHtml(finding.id)}"')
     expect(source).not.toContain('data-finding-id="${finding.id}"')
+  })
+})
+
+describe('regex bornées sur de longues suites d’espaces', () => {
+  const spaces = ' '.repeat(200_000)
+
+  it('CSV : cellule Policy et listes sans coût quadratique', () => {
+    const csv = `Policy,Name,From,To,Source,Destination,Schedule,Service,Action,Log Traffic,Status\n"${spaces}",x,lan,wan,"${spaces}",all,always,ALL,ACCEPT,Disable,Enabled`
+    const started = performance.now()
+    analyzeImportedConfiguration(csv, 'p.csv')
+    expect(performance.now() - started).toBeLessThan(1500)
+  })
+
+  it('config : commentaire « ticket » / « owner » suivi de milliers d’espaces', () => {
+    const config = `config firewall policy\n    edit 1\n        set name "a"\n        set comments "ticket${spaces}x owner${spaces}y"\n    next\nend`
+    const started = performance.now()
+    analyzeConfiguration(config)
+    expect(performance.now() - started).toBeLessThan(1500)
+  })
+})
+
+describe('escapeHtml partagé', () => {
+  it('échappe & < > " et \'', () => {
+    expect(escapeHtml(`<a href="x" title='y'>&</a>`)).toBe('&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;')
   })
 })

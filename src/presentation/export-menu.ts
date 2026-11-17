@@ -1,4 +1,5 @@
 import { tr } from '../i18n'
+import { escapeHtml } from './html'
 
 /** Verrouillage optionnel décidé par l'édition (voir `edition.ts`) : attributs et badge par bouton. */
 export interface ExportMenuLock {
@@ -9,7 +10,6 @@ export interface ExportMenuLock {
 /** Entrée supplémentaire fournie par l'édition (libellés de confiance, échappés ici quand même). */
 export interface ExtraExport { id: string, label: string, hint: string }
 
-const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`)
 
 export const renderExportMenu = (auditReady: boolean, lock?: ExportMenuLock, extras: readonly ExtraExport[] = []): string => {
   const disabled = auditReady ? '' : ' disabled'

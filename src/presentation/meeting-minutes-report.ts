@@ -4,10 +4,8 @@ import { formatUsage } from '../domain/policy-usage'
 import { cardLocation, formatDuration, minutesSections } from '../domain/meeting-minutes'
 import { severityLabel } from '../domain/labels'
 import { getLocale, tr } from '../i18n'
+import { escapeHtml } from './html'
 
-const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (character) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-})[character] ?? character)
 
 const paragraph = (value: string) => escapeHtml(value.trim()).replace(/\r?\n/g, '<br>')
 

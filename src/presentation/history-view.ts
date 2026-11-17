@@ -1,8 +1,7 @@
 import { entriesForSource, type HistoryEntry } from '../application/audit-history'
 import { formatDate, plural, tr } from '../i18n'
+import { escapeHtml } from './html'
 
-const escapeHtml = (value: string): string =>
-  value.replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character] ?? character)
 
 const formatDelta = (delta: number): string => (delta > 0 ? `+${delta}` : String(delta))
 

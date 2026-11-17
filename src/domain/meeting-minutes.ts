@@ -14,7 +14,7 @@ export const minutesSections = (): Array<{ column: MeetingColumn, heading: strin
 ]
 
 /** Neutralise le HTML brut que certains rendus Markdown interprètent, et aplatit les retours à la ligne. */
-const inline = (value: string): string => value.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\s*\n\s*/g, ' ').trim()
+const inline = (value: string): string => value.replace(/</g, '&lt;').replace(/>/g, '&gt;').split('\n').map((line) => line.trim()).filter(Boolean).join(' ')
 
 const multiline = (value: string): string => value.trim().split(/\r?\n/).map((line) => `  > ${inline(line)}`).join('\n')
 
@@ -46,7 +46,7 @@ const renderCard = (card: MeetingCard, audit: Pick<AuditResult, 'policies' | 'fi
   if (usage) lines.push(`- ${tr('Utilisation', 'Usage')}${c}${inline(usage)}`)
   if (card.proposal) lines.push(`- ${tr('Proposition initiale', 'Initial proposal')}${c}${meetingColumnLabel(card.proposal)}`)
   if (card.rationale.trim()) lines.push(`- ${tr('Justification', 'Rationale')}${c}${inline(card.rationale)}`)
-  if (card.dueDate) lines.push(`- ${tr('Échéance', 'Due date')}${c}${card.dueDate}`)
+  if (card.dueDate) lines.push(`- ${tr('Échéance', 'Due date')}${c}${inline(card.dueDate)}`)
   if (card.prepNote.trim()) lines.push(`- ${tr('Notes de préparation', 'Preparation notes')}${c.trimEnd()}`, multiline(card.prepNote))
   return lines.join('\n')
 }
@@ -59,7 +59,7 @@ export const renderMinutesMarkdown = (board: MeetingBoard, audit: Pick<AuditResu
   const header = [
     `# ${inline(board.title)}`,
     '',
-    `- Date${c}${board.date}`,
+    `- Date${c}${inline(board.date)}`,
     `- Configuration${c}${inline(board.sourceName)}`,
     `- Participants${c}${board.participants.length ? board.participants.map(inline).join(', ') : tr('non renseignés', 'not specified')}`,
     ...(duration ? [`- ${tr('Durée', 'Duration')}${c}${duration}`] : []),

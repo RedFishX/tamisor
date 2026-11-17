@@ -3,9 +3,8 @@ import type { Severity } from '../domain/audit'
 import type { FamilySummary, FindingFamily, PriorityFinding, VdomSummary } from '../domain/overview'
 import { severityLabel } from '../domain/labels'
 import { formatDate, plural as pluralWord, tr } from '../i18n'
+import { escapeHtml } from './html'
 
-const escapeHtml = (value: string): string =>
-  value.replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character] ?? character)
 
 export const familyLabel = (family: FindingFamily): string => ({
   risk: tr('Risque', 'Risk'),

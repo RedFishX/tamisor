@@ -12,7 +12,7 @@ self.onmessage = (event: MessageEvent<AuditRequest>) => {
   setLocale(event.data.locale)
   self.postMessage({ type: 'progress', message: tr('Import du fichier…', 'Importing the file…') })
   const result = analyzeImportedConfiguration(event.data.content, event.data.fileName)
-  const editCount = (event.data.content.match(/^\s*edit\s+/gm) ?? []).length
+  const editCount = event.data.content.split('\n').filter((line) => /^\s*edit\s/.test(line)).length
   const objectCount = event.data.fileName.toLowerCase().endsWith('.csv') ? 0 : Math.max(0, editCount - result.policies.length)
   const policies = result.policies.length
   self.postMessage({

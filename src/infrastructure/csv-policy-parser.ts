@@ -47,7 +47,7 @@ const valueFor = (row: CsvRow, field: keyof typeof HEADER_ALIASES): string => {
 }
 
 const splitList = (value: string): string[] => value
-  .split(/\s*(?:,|\n|\r|\|)\s*/)
+  .split(/[,\n\r|]/)
   .map((item) => item.trim())
   .filter(Boolean)
 
@@ -94,7 +94,7 @@ export const parseCsvPolicies = (content: string): { policies: FirewallPolicy[],
 
   const policies = parsed.data.map((row, index) => {
     const combinedPolicy = valueFor(row, 'policy')
-    const combinedMatch = combinedPolicy.match(/^(.*?)\s*\((\d+)\)\s*$/)
+    const combinedMatch = combinedPolicy.match(/^(.*)\((\d+)\)$/)
     const combinedId = /^\d+$/.test(combinedPolicy) ? combinedPolicy : combinedMatch?.[2]
     const id = singleLine(valueFor(row, 'id')) || combinedId || String(index + 1)
     const combinedName = combinedMatch?.[1].trim() || (/^\d+$/.test(combinedPolicy) ? '' : combinedPolicy)

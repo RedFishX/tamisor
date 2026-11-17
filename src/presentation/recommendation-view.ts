@@ -2,15 +2,8 @@ import type { Finding, Recommendation } from '../domain/audit'
 import { tr } from '../i18n'
 import { complianceReferences, formatComplianceReference } from '../domain/compliance'
 import { neutralizeSpreadsheetFormula } from '../domain/text-safety'
+import { escapeHtml } from './html'
 
-const escapeHtml = (value: string): string =>
-  value.replace(/[&<>'"]/g, (character) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    "'": '&#39;',
-    '"': '&quot;',
-  })[character] ?? character)
 
 export const renderRecommendation = (recommendation: Recommendation): string => `
   <div class="recommendation">
