@@ -1,0 +1,25 @@
+# Mises à jour automatiques des dépendances que ce dépôt épingle (SHA d'actions, digests d'images, npm).
+# Les PR sont ouvertes par dependabot[bot], déjà dans la liste d'autorisation du CLA.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
