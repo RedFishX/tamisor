@@ -7,6 +7,10 @@
 #
 # La référence est recalculée à partir de la branche cible : seuls les constats introduits
 # par la merge request font échouer le job.
+#
+# Sur une merge request, l'outil et les acquittements sont lus dans la branche cible, jamais dans la
+# merge request : elle ne peut ni remplacer l'outil, ni s'acquitter elle-même de ses constats. Une
+# modification de ces deux fichiers prend effet une fois fusionnée ; protégez-les (CODEOWNERS).
 
 variables:
   TAMISOR_CONFIG: "firewalls/fw-siege.conf"
@@ -26,17 +30,27 @@ tamisor:
     - apk add --no-cache git
   script:
     - |
+      TOOL=tools/tamisor.mjs
+      ACK_FILE=acquittements-tamisor.json
       BASELINE_ARGS=""
       if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
         git fetch --depth=1 origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-        if git show "FETCH_HEAD:$TAMISOR_CONFIG" > /tmp/target.conf 2>/dev/null; then
-          node tools/tamisor.mjs /tmp/target.conf --source-uri "$TAMISOR_CONFIG" --json baseline.json --fail-on none > /dev/null
-          BASELINE_ARGS="--baseline baseline.json"
+        mkdir -p /tmp/trusted
+        git show "FETCH_HEAD:tools/tamisor.mjs" > /tmp/trusted/tamisor.mjs
+        TOOL=/tmp/trusted/tamisor.mjs
+        if git show "FETCH_HEAD:acquittements-tamisor.json" > /tmp/trusted/acquittements-tamisor.json 2>/dev/null; then
+          ACK_FILE=/tmp/trusted/acquittements-tamisor.json
+        else
+          ACK_FILE=/nonexistent
+        fi
+        if git show "FETCH_HEAD:$TAMISOR_CONFIG" > /tmp/trusted/target.conf 2>/dev/null; then
+          node "$TOOL" /tmp/trusted/target.conf --source-uri "$TAMISOR_CONFIG" --json /tmp/trusted/baseline.json --fail-on none > /dev/null
+          BASELINE_ARGS="--baseline /tmp/trusted/baseline.json"
         fi
       fi
       ACK_ARGS=""
-      [ -f acquittements-tamisor.json ] && ACK_ARGS="--acknowledgements acquittements-tamisor.json"
-      node tools/tamisor.mjs "$TAMISOR_CONFIG" \
+      [ -f "$ACK_FILE" ] && ACK_ARGS="--acknowledgements $ACK_FILE"
+      node "$TOOL" "$TAMISOR_CONFIG" \
         --sarif tamisor.sarif --json tamisor.json \
         --fail-on "$TAMISOR_FAIL_ON" $BASELINE_ARGS $ACK_ARGS
   artifacts:

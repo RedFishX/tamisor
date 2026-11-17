@@ -1,6 +1,11 @@
 # Audit Tamisor à chaque pull request, avec affichage des constats dans GitHub code scanning.
 # À placer dans .github/workflows/ du dépôt des configurations, avec tools/tamisor.mjs
 # (construit par `npm run build:cli` dans le dépôt Tamisor).
+#
+# Sur une pull request, l'outil, la référence (baseline) et les acquittements sont lus dans la branche cible, jamais
+# dans la PR : une PR ne peut ainsi ni remplacer l'outil, ni s'acquitter elle-même de ses propres constats. Une
+# modification de tools/tamisor.mjs ou de acquittements-tamisor.json prend effet une fois la PR fusionnée.
+# Protégez ces deux fichiers par un CODEOWNERS et la protection de branche.
 
 name: Tamisor
 
@@ -23,28 +28,41 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-      - name: Référence (branche cible)
-        if: github.event_name == 'pull_request'
+      - name: Fichiers de confiance (outil, référence, acquittements)
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if git show "origin/${{ github.base_ref }}:$TAMISOR_CONFIG" > /tmp/target.conf 2>/dev/null; then
-            node tools/tamisor.mjs /tmp/target.conf --source-uri "$TAMISOR_CONFIG" --json baseline.json --fail-on none > /dev/null
+          T="$RUNNER_TEMP/trusted"
+          mkdir -p "$T"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            git show "origin/$BASE_REF:tools/tamisor.mjs" > "$T/tamisor.mjs"
+            git show "origin/$BASE_REF:acquittements-tamisor.json" > "$T/acquittements-tamisor.json" 2>/dev/null || rm -f "$T/acquittements-tamisor.json"
+            if git show "origin/$BASE_REF:$TAMISOR_CONFIG" > "$T/target.conf" 2>/dev/null; then
+              node "$T/tamisor.mjs" "$T/target.conf" --source-uri "$TAMISOR_CONFIG" --json "$T/baseline.json" --fail-on none > /dev/null
+            fi
+          else
+            cp tools/tamisor.mjs "$T/tamisor.mjs"
+            [ -f acquittements-tamisor.json ] && cp acquittements-tamisor.json "$T/acquittements-tamisor.json" || true
           fi
       - name: Audit
+        env:
+          FAIL_ON: ${{ github.event_name == 'pull_request' && env.TAMISOR_FAIL_ON || 'none' }}
         run: |
+          T="$RUNNER_TEMP/trusted"
           ARGS=""
-          [ -f baseline.json ] && ARGS="$ARGS --baseline baseline.json"
-          [ -f acquittements-tamisor.json ] && ARGS="$ARGS --acknowledgements acquittements-tamisor.json"
-          node tools/tamisor.mjs "$TAMISOR_CONFIG" --sarif tamisor.sarif --json tamisor.json \
-            --fail-on "${{ github.event_name == 'pull_request' && env.TAMISOR_FAIL_ON || 'none' }}" $ARGS
+          [ -f "$T/baseline.json" ] && ARGS="$ARGS --baseline $T/baseline.json"
+          [ -f "$T/acquittements-tamisor.json" ] && ARGS="$ARGS --acknowledgements $T/acquittements-tamisor.json"
+          node "$T/tamisor.mjs" "$TAMISOR_CONFIG" --sarif tamisor.sarif --json tamisor.json \
+            --fail-on "$FAIL_ON" $ARGS
       - name: Envoi vers code scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@9418214df1f2c4b8128c770156c409013b07d6b9 # v3
         with:
           sarif_file: tamisor.sarif
           category: tamisor
