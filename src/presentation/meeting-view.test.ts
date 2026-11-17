@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { meetingFinding as finding, meetingPolicy as policy } from '../test-fixtures/meeting-fixtures'
 import { addPolicies, createBoard, findingsForCard, moveCard, policyForCard } from '../domain/meeting'
@@ -86,5 +87,16 @@ describe('renderMinutesHtml', () => {
     expect(html).toContain('<!doctype html>')
     expect(html).toContain('Non traitées (2)')
     expect(html).toContain('LAN_&lt;ERP&gt;')
+  })
+
+  it('porte une CSP qui n’autorise que son script, par empreinte, sans gestionnaire en attribut', () => {
+    const html = renderMinutesHtml(addPolicies(createBoard('fw.conf'), findings), audit)
+    const script = html.match(/<script>([\s\S]*?)<\/script>/)![1]
+    const hash = `sha256-${createHash('sha256').update(script).digest('base64')}`
+    expect(html).toContain(`script-src '${hash}'`)
+    expect(html).toContain("default-src 'none'")
+    expect(html.match(/<script/g)).toHaveLength(1)
+    expect(html).not.toMatch(/<[^>]*\son[a-z]+\s*=/i)
+    expect(() => new Function(script)).not.toThrow()
   })
 })

@@ -28,12 +28,19 @@ const renderCard = (card: MeetingCard, audit: Pick<AuditResult, 'policies' | 'fi
   </article>`
 }
 
+/**
+ * Script du compte rendu autonome : constant, autorisé dans la CSP du fichier par son empreinte (le bouton « Imprimer »
+ * n'a plus de gestionnaire en attribut). Après toute modification, remplacer l'empreinte par celle que donne le test.
+ */
+const MINUTES_SCRIPT = `document.querySelector('#print-button').addEventListener('click',()=>window.print());`
+const MINUTES_CSP = `default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'sha256-awelDq3V6j8DGXEgBSkNC9LUb2VcV5IQWmXZZ702TrU='; base-uri 'none'; form-action 'none'`
+
 export const renderMinutesHtml = (board: MeetingBoard, audit: Pick<AuditResult, 'policies' | 'findings'>): string => {
   const progress = boardProgress(board)
   const duration = formatDuration(board.startedAt, board.endedAt)
   const sections = minutesSections()
   return `<!doctype html>
-<html lang="${getLocale()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(board.title)}</title>
+<html lang="${getLocale()}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${MINUTES_CSP}"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(board.title)}</title>
 <style>
 :root{--ink:#17201d;--muted:#646e6a;--paper:#f6f7f4;--surface:#fff;--line:#dfe3df;--green:#146c53;--red:#b83232;--red-soft:#fae7e4;--amber:#955808;--amber-soft:#fff0d2;--blue:#2e609b;--blue-soft:#e8f0fa;--count:#e6eae5}
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 "Plus Jakarta Sans","Segoe UI",system-ui,sans-serif}
@@ -46,11 +53,11 @@ dl{margin:0;display:grid;grid-template-columns:190px 1fr;gap:4px 16px;font-size:
 button{position:fixed;top:16px;right:16px;padding:8px 14px;border:1px solid var(--line);border-radius:5px;background:var(--surface);font:inherit;font-weight:700;cursor:pointer}
 @media(max-width:640px){.counts{grid-template-columns:repeat(3,1fr)}dl{grid-template-columns:1fr}button{position:static;margin:16px}}
 @media print{body{background:#fff}button{display:none}main{width:100%;margin:0}}
-</style></head><body><button type="button" onclick="window.print()">${tr('Imprimer', 'Print')}</button><main>
+</style></head><body><button type="button" id="print-button">${tr('Imprimer', 'Print')}</button><main>
 <p class="eyebrow">${tr('Compte rendu de réunion', 'Meeting minutes')}</p><h1>${escapeHtml(board.title)}</h1>
 <ul class="meta"><li>Date <strong>${escapeHtml(board.date)}</strong></li><li>Configuration <strong>${escapeHtml(board.sourceName)}</strong></li><li>Participants <strong>${escapeHtml(board.participants.join(', ') || tr('non renseignés', 'not specified'))}</strong></li>${duration ? `<li>${tr('Durée', 'Duration')} <strong>${duration}</strong></li>` : ''}</ul>
 <section class="counts">${sections.map(({ column, heading }) => `<div><span>${heading}</span><strong>${progress.byColumn[column]}</strong></div>`).join('')}</section>
 ${sections.map(({ column, heading }) => ({ heading, cards: cardsInColumn(board, column) })).filter(({ cards }) => cards.length)
     .map(({ heading, cards }) => `<h2>${heading} (${cards.length})</h2>${cards.map((card) => renderCard(card, audit)).join('')}`).join('')}
-</main></body></html>`
+</main><script>${MINUTES_SCRIPT}</script></body></html>`
 }

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { analyzeConfiguration } from '../domain/analyzer'
 import { createExecutiveSummary, renderHtmlReport, serializeRecommendationsCli } from './audit-report'
@@ -59,5 +60,36 @@ describe('audit reports', () => {
     const cli = serializeRecommendationsCli(audit.findings)
     expect(cli).toContain('# Règle 1 - Global')
     expect(cli).toContain('config firewall policy')
+  })
+
+  describe('CSP du rapport HTML autonome', () => {
+    const html = renderHtmlReport(audit, 'site</script><img src=x onerror=alert(1)>.conf')
+    const script = html.match(/<script>([\s\S]*?)<\/script>/)![1]
+
+    it('autorise le seul script du fichier, par son empreinte', () => {
+      const hash = `sha256-${createHash('sha256').update(script).digest('base64')}`
+      const csp = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/)![1]
+      // Si ce test échoue après une modification du script, remplacer REPORT_SCRIPT_SHA256 par la valeur « hash » ci-dessus.
+      expect(csp).toContain(`script-src '${hash}'`)
+      expect(csp).toContain("default-src 'none'")
+      expect(csp).not.toMatch(/unsafe-eval|unsafe-hashes|script-src[^;]*unsafe-inline|https?:/)
+      expect(html.indexOf('Content-Security-Policy')).toBeLessThan(html.indexOf('<style>'))
+    })
+
+    it('n’a aucun gestionnaire d’événement en attribut ni autre script exécutable', () => {
+      expect(html).not.toMatch(/<[^>]*\son[a-z]+\s*=/i)
+      expect(html.match(/<script/g)).toHaveLength(2)
+      expect(html).toContain('<script type="application/json" id="report-config">')
+    })
+
+    it('garde la langue hors du script : le bloc JSON est valide et ne peut pas fermer sa balise', () => {
+      const json = html.match(/<script type="application\/json" id="report-config">([\s\S]*?)<\/script>/)![1]
+      expect(json).not.toContain('<')
+      expect(JSON.parse(json)).toMatchObject({ shownLabel: [expect.any(String), expect.any(String)], isEnglish: expect.any(Boolean) })
+    })
+
+    it('est une source JavaScript valide', () => {
+      expect(() => new Function(script)).not.toThrow()
+    })
   })
 })
