@@ -1,0 +1,12 @@
+Policy ID;Name;From;To;Source;Destination;Schedule;Service;Action;NAT;Security Profiles;Log Traffic;Status;Hit Count;Last Used
+1;Admins-vers-serveurs;lan;lan;Admins-IT;GRP-SERVEURS;always;SSH, RDP;ACCEPT;Disabled;default;All Sessions;Enabled;48 212;2026-11-04
+2;Postes-Internet;lan;wan1;LAN-Postes;all;always;HTTP, HTTPS, DNS;ACCEPT;Enabled;default;All Sessions;Enabled;12 904 551;2026-11-05
+3;Acces-global-temporaire;lan;wan1;all;all;always;ALL;ACCEPT;Enabled;None;Disabled;Enabled;87 330 120;2026-11-05
+4;Postes-HTTPS-doublon;lan;wan1;LAN-Postes;all;always;HTTPS;ACCEPT;Enabled;default;All Sessions;Enabled;0;Never
+5;Ancien-VPN-presta;wan1;lan;PRESTA-2019;SRV-AD-01;always;RDP;ACCEPT;Disabled;None;Security Events;Enabled;312;2025-03-12
+6;Imprimantes-vers-scan;lan;lan;LAN-Imprimantes;SRV-FICHIERS-01;always;SMB;ACCEPT;Disabled;None;All Sessions;Enabled;0;Never
+7;Publication-ERP;wan1;dmz;all;VIP-ERP;always;HTTPS;ACCEPT;Disabled;default;Security Events;Enabled;1 204 877;2026-11-05
+8;Wifi-invites-Internet;wifi-invites;wan1;Wifi-Invites;all;always;HTTPS, DNS;ACCEPT;Enabled;default;All Sessions;Enabled;3 560 019;2026-11-05
+9;Sauvegarde-nocturne;lan;dmz;SRV-FICHIERS-01;SRV-BACKUP;nuit-semaine;SSH;ACCEPT;Disabled;None;All Sessions;Enabled;1 840;2026-11-03
+10;Test-poste-dev;lan;wan1;PC-DEV-04;all;always;ALL_TCP;ACCEPT;Enabled;None;Disabled;Enabled;5;2024-06-18
+11;Regle-desactivee;lan;wan1;LAN-Postes;all;always;ALL;ACCEPT;Enabled;None;Disabled;Disabled;0;Never

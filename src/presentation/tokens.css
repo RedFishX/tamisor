@@ -1,0 +1,115 @@
+/* Charte partagée : polices, couleurs, tailles. Importée par style.css et réutilisable par d'autres pages. */
+@import '@fontsource/plus-jakarta-sans/latin-400.css';
+@import '@fontsource/plus-jakarta-sans/latin-500.css';
+@import '@fontsource/plus-jakarta-sans/latin-600.css';
+@import '@fontsource/plus-jakarta-sans/latin-700.css';
+@import '@fontsource/plus-jakarta-sans/latin-800.css';
+
+/* Chasse fixe : Azeret Mono, dont le zéro n'a ni point ni barre. Réduite à 92 % pour garder la largeur
+   de caractère de l'ancienne police (0,6 em) et ne pas décaler les mises en page. */
+@font-face {
+  font-family: 'Azeret Mono'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('@fontsource/azeret-mono/files/azeret-mono-latin-400-normal.woff2') format('woff2');
+  size-adjust: 92%;
+}
+@font-face {
+  font-family: 'Azeret Mono'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('@fontsource/azeret-mono/files/azeret-mono-latin-500-normal.woff2') format('woff2');
+  size-adjust: 92%;
+}
+@font-face {
+  font-family: 'Azeret Mono'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('@fontsource/azeret-mono/files/azeret-mono-latin-600-normal.woff2') format('woff2');
+  size-adjust: 92%;
+}
+
+/* Charte Tamisor : une couleur d'accent (green), des neutres teintés de vert, trois couleurs de signal. */
+:root {
+  --ink: #17201d;
+  --muted: #5c6662;      /* ≥ 4,5:1 (WCAG AA) sur tous les fonds clairs, y compris --count et les fonds de sévérité. */
+  --faint: #9ba39f;        /* décoratif uniquement : icônes, filets. Jamais pour du texte. */
+  --paper: #f6f7f4;
+  --surface: #ffffff;
+  --sidebar: #f0f2ee;
+  --subtle: #f1f4f0;
+  --detail: #fbfcfa;
+  --selected: #e9f2ed;
+  --line: #dfe3df;
+  --line-strong: #cdd3ce;
+  --count: #e6eae5;
+  --green: #146c53;
+  --green-soft: #e3f2eb;
+  --on-green: #ffffff;
+  --red: #b83232;
+  --red-soft: #fae7e4;
+  --error-line: #e9b8b1;
+  --amber: #955808;
+  --amber-soft: #fff0d2;
+  --blue: #2e609b;
+  --blue-soft: #e8f0fa;
+  --code-surface: #202724;
+  --code-ink: #dbe7df;
+  --code-label: #9eaaa4;
+  --code-line: #3a4540;
+  --scrim: rgba(10, 20, 15, .36);
+  --shadow-menu: 0 14px 35px rgba(10, 20, 15, .16);
+  --shadow-dialog: 0 24px 70px rgba(10, 20, 15, .32);
+
+  --font-sans: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Azeret Mono', 'Cascadia Mono', Consolas, monospace;
+  --text-11: 11px;
+  --text-12: 12px;
+  --text-13: 13px;
+  --text-14: 14px;
+  --text-16: 16px;
+  --text-20: 20px;
+  --text-25: 25px;
+  --text-31: 31px;
+  --radius-badge: 3px;
+  --radius-control: 5px;
+  --radius-panel: 8px;
+  --control-height: 36px;
+  --ease: 160ms ease-out;
+
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--font-sans);
+  font-size: var(--text-14);
+  line-height: 1.5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme='dark'] {
+  --ink: #edf3ef;
+  --muted: #aebbb4;
+  --faint: #829089;
+  --paper: #111613;
+  --surface: #1a211d;
+  --sidebar: #151b18;
+  --subtle: #1f2723;
+  --detail: #161d19;
+  --selected: #213229;
+  --line: #323c36;
+  --line-strong: #465249;
+  --count: #2a332e;
+  --green: #55c59a;
+  --green-soft: #193b2e;
+  --on-green: #0d1f17;
+  --red: #ff8177;
+  --red-soft: #40221f;
+  --error-line: #6a2f2a;
+  --amber: #f0b85c;
+  --amber-soft: #3b301d;
+  --blue: #83b7ef;
+  --blue-soft: #20344a;
+  --code-surface: #0c110e;
+  --code-ink: #dbe7df;
+  --code-label: #9eaaa4;
+  --code-line: #2e3833;
+  --scrim: rgba(0, 0, 0, .58);
+  --shadow-menu: 0 14px 35px rgba(0, 0, 0, .5);
+  --shadow-dialog: 0 24px 70px rgba(0, 0, 0, .6);
+  color-scheme: dark;
+}

@@ -1,0 +1,19 @@
+# Démarrage : docker compose up -d   puis http://localhost:8080  (port modifiable : PORT=9000 docker compose up -d)
+services:
+  tamisor:
+    build:
+      context: .
+      target: web
+    image: ghcr.io/redfishx/tamisor:latest
+    container_name: tamisor
+    ports:
+      - "${PORT:-8080}:8080"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

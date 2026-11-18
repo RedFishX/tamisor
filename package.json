@@ -1,0 +1,33 @@
+{
+  "name": "tamisor",
+  "private": true,
+  "version": "0.1.0",
+  "license": "AGPL-3.0-or-later",
+  "description": "Audit des politiques de pare-feu FortiGate dans le navigateur : règles permissives, masquées, sans journalisation.",
+  "repository": "github:RedFishX/tamisor",
+  "type": "module",
+  "bin": {
+    "tamisor": "dist-cli/tamisor.mjs"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && vite build --config vite.cli.config.ts",
+    "test": "vitest run",
+    "hooks:install": "git config core.hooksPath .githooks",
+    "preview": "vite preview",
+    "build:cli": "vite build --config vite.cli.config.ts"
+  },
+  "devDependencies": {
+    "@types/papaparse": "^5.5.2",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@fontsource/azeret-mono": "^5.3.0",
+    "@fontsource/fraunces": "^5.3.0",
+    "@fontsource/plus-jakarta-sans": "^5.3.0",
+    "lucide": "^1.74.0",
+    "papaparse": "^5.7.1"
+  }
+}
