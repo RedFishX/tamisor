@@ -4,6 +4,8 @@
 @import '@fontsource/plus-jakarta-sans/latin-600.css';
 @import '@fontsource/plus-jakarta-sans/latin-700.css';
 @import '@fontsource/plus-jakarta-sans/latin-800.css';
+@import '@fontsource/fraunces/latin-500.css';
+@import '@fontsource/fraunces/latin-600.css';
 
 /* Chasse fixe : Azeret Mono, dont le zéro n'a ni point ni barre. Réduite à 92 % pour garder la largeur
    de caractère de l'ancienne police (0,6 em) et ne pas décaler les mises en page. */
@@ -56,6 +58,7 @@
   --shadow-dialog: 0 24px 70px rgba(10, 20, 15, .32);
 
   --font-sans: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
   --font-mono: 'Azeret Mono', 'Cascadia Mono', Consolas, monospace;
   --text-11: 11px;
   --text-12: 12px;
